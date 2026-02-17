@@ -1,731 +1,441 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
-using System.Threading;
+using System.Linq;
+using System.Text;
+using System.Threading; 
 
 namespace Totepad;
 
-class Note
+// 1. Models 
+/// <summary>
+/// Ito ang pattern para sa mga notes natin. May Title ito para sa pangalan ng file at Content para sa mismong text. Ginawa ko itong 'record' para hindi basta-basta magulo ang data at madaling i-manage. Dito umiikot ang buong app para sa paggawa, pag-edit, at pag-delete ng notes kemkemekeme
+/// </summary>
+public record Note(string Title, string Content);
+
+public static class TotepadConstants
 {
-    public string Title { get; set; } = string.Empty;
-    public string Content { get; set; } = string.Empty;
+    public const string NotesFolder = "Notes";
+    public const string NoteExtension = ".txt";
+    public const ConsoleColor PrimaryColor = ConsoleColor.Yellow;
+    public const ConsoleColor HighlightColor = ConsoleColor.Green;
+    public const ConsoleColor ErrorColor = ConsoleColor.Red;
 }
 
-class TotePad
-{
-    string notesFolder = "Notes";
-    List<Note> notes = new List<Note>();
 
-    void StartupSequence()
+
+// 2. Note Services 
+/// <summary>
+/// Ito ang taga-handle ng lahat ng file settings sa notes natin. Siya ang sumisigurado na may folder para sa notes, siya ang nagse-save, naglo-load, at nagbubura ng mga files. Nilagay ko lahat ng file logic dito para hindi magulo sa main program at may kasama na rin itong error handling para hindi basta-basta mag-crash ang app kung may problema sa folder.
+/// </summary>
+public class NoteService
+{
+    public void EnsureDirectoryExists()
+    {
+        try
+        {
+            if (!Directory.Exists(TotepadConstants.NotesFolder))
+                Directory.CreateDirectory(TotepadConstants.NotesFolder);
+        }
+        catch (Exception ex) // sinasalo kapag may error sa pag-create ng folder
+        {
+            Console.WriteLine($"Critical Error: Could not create directory. {ex.Message}");
+        }
+    }
+
+    public List<Note> LoadAllNotes()
+    {
+        var notes = new List<Note>();
+        try
+        {
+            foreach (string file in Directory.GetFiles(TotepadConstants.NotesFolder, $"*{TotepadConstants.NoteExtension}"))
+            {
+                notes.Add(new Note(
+                    Path.GetFileNameWithoutExtension(file),
+                    File.ReadAllText(file)
+                ));
+            }
+        }
+        catch (IOException ex) // sinasalo kapag may error sa pag-read ng files
+        {
+            MenuRenderer.ShowErrorMessage($"Error loading notes: {ex.Message}");
+        }
+        return notes;
+    }
+
+
+    public bool SaveNote(Note note)
+    {
+        try
+        {
+            string safeTitle = MenuRenderer.SanitizeFilename(note.Title);
+            string path = Path.Combine(TotepadConstants.NotesFolder, safeTitle + TotepadConstants.NoteExtension);
+            File.WriteAllText(path, note.Content);
+            return true;
+        }
+        catch (Exception ex) // sinasalo kapag may error sa pag-save ng file
+        {
+            MenuRenderer.ShowErrorMessage($"Failed to save: {ex.Message}");
+            return false;
+        }
+    }
+
+    public void DeleteNote(string title)
+    {
+        try
+        {
+            string path = Path.Combine(TotepadConstants.NotesFolder, title + TotepadConstants.NoteExtension);
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch (Exception ex) // sinasalo kapag may error sa pag-delete ng file
+        {
+            MenuRenderer.ShowErrorMessage($"Delete failed: {ex.Message}");
+        }
+    }
+}
+
+// 3. UI 
+/// <summary>
+/// Dito ko nilagay lahat ng code para sa itsura ng app, gaya ng mga header, instruction boxes, at mga menu. Ginawa ko itong helper para isang lugar na lang ang babaguhin ko kung gusto kong palitan ang design at para hindi masyadong mahaba o magulo yung main code 
+/// </summary>
+public static class MenuRenderer
+{
+    public static void DrawHeader(string title)
     {
         Console.Clear();
         Console.ForegroundColor = ConsoleColor.Yellow;
 
+        int boxWidth = 42; 
+        int leftPadding = (boxWidth - title.Length) / 2;
+        int rightPadding = boxWidth - title.Length - leftPadding;
+    
         Console.WriteLine("==============================================");
         Console.WriteLine("=                                            =");
-        Console.WriteLine("=                 WELCOME TO                 =");
-        Console.WriteLine("=                  TOTEPAD                   =");
+        Console.WriteLine($"= {new string(' ', leftPadding)}{title}{new string(' ', rightPadding)} =");
         Console.WriteLine("=                                            =");
-        Console.WriteLine("==============================================\n\n\n\n\n\n\n");
-
-        Console.ForegroundColor = ConsoleColor.White;
-        Console.WriteLine("Press any key to continue...");
-        Console.ReadKey(true);
+        Console.WriteLine("==============================================\n");
     }
-/// <summary>
-/// This loads existing notes from the Note folder.
-/// </summary>
-    void LoadNotes()
+
+    public static void InstructionHeader(string message)
     {
-        if (!Directory.Exists(notesFolder))
-            Directory.CreateDirectory(notesFolder);
+        Console.ForegroundColor = ConsoleColor.Yellow;
 
-        notes.Clear();
+        int boxWidth = 26; 
+        int leftPadding = Math.Max(0, (boxWidth - message.Length) / 2);
+        int rightPadding = Math.Max(0, boxWidth - message.Length - leftPadding);
 
-        foreach (string file in Directory.GetFiles(notesFolder, "*.txt"))
+        Console.WriteLine($"~ {message} ~\n");
+        Console.ForegroundColor = ConsoleColor.White;
+    }
+    public static string SanitizeFilename(string title)
+    {
+        foreach (char c in Path.GetInvalidFileNameChars())
+            title = title.Replace(c, '_');
+        return title;
+    }
+
+    public static void ShowErrorMessage(string msg)
+    {
+        Console.ForegroundColor = TotepadConstants.ErrorColor;
+        Console.WriteLine($"\n[ERROR] {msg}");
+        Console.ForegroundColor = ConsoleColor.White;
+        Thread.Sleep(2000);
+    }
+
+    public static int ShowArrowMenu(string[] options)
+    {
+        int startLine = Console.CursorTop;
+        if (startLine + options.Length >= Console.BufferHeight)
         {
-            notes.Add(new Note
+            Console.Clear(); // Linisin ang screen kung wala nang space para sa menu
+            DrawHeader(" NOTES MENU ");
+            startLine = Console.CursorTop;
+        }
+        int selected = 0;
+        Console.CursorVisible = false;
+        while (true)
+        {
+            for (int i = 0; i < options.Length; i++)
             {
-                Title = Path.GetFileNameWithoutExtension(file),
-                Content = File.ReadAllText(file)
-            });
+                Console.SetCursorPosition(0, startLine + i);
+                if (i == selected)
+                {
+                    Console.ForegroundColor = TotepadConstants.HighlightColor;
+                    Console.WriteLine($"> [ {options[i]} ]  ");
+                }
+                else
+                {
+                    Console.ForegroundColor = ConsoleColor.White;
+                    Console.WriteLine($"    {options[i]}    ");
+                }
+            }
+
+            var key = Console.ReadKey(true).Key;
+            if (key == ConsoleKey.UpArrow) selected = (selected - 1 + options.Length) % options.Length;
+            else if (key == ConsoleKey.DownArrow) selected = (selected + 1) % options.Length;
+            else if (key == ConsoleKey.Enter) return selected;
         }
     }
-    bool ShowDecisionMenu(string prompt, string positiveOption, string negativeOption)
+
+    public static bool ShowDecisionMenu(string prompt, string leftOption, string rightOption)
     {
-        int selected = 0; // 0 = Positive (Green), 1 = Negative (Red)
-        string[] options = { positiveOption, negativeOption };
-
-
-        Console.WriteLine($"\n\n{prompt}");
-
-        // Save current cursor position so we can redraw the menu without clearing the whole screen
+        int selected = 0; // 0 = Left (Cancel/No), 1 = Right (Save/Yes) 
+        string[] options = { leftOption, rightOption };
+        
+        Console.WriteLine($"\n{prompt}");
         int menuTop = Console.CursorTop;
         Console.CursorVisible = false;
 
         while (true)
         {
-            Console.SetCursorPosition(0, menuTop); 
-
-            Console.Write(new string(' ', Console.WindowWidth)); 
+            Console.SetCursorPosition(0, menuTop);
+            // Clear the line before drawing buttons
+            Console.Write(new string(' ', Console.WindowWidth));
             Console.SetCursorPosition(0, menuTop);
 
             for (int i = 0; i < options.Length; i++)
             {
                 if (i == selected)
                 {
-                    // Logic for Colors: Green for Positive, Red for Negative
-                    if (i == 0) Console.ForegroundColor = ConsoleColor.Green;
-                    else Console.ForegroundColor = ConsoleColor.Red;
-
-                    Console.Write($"[ {options[i]} ]   ");
+                    // Left is Red (Cancel), Right is Green (Save), 
+                    Console.ForegroundColor = (i == 0) ? ConsoleColor.Red : ConsoleColor.Green;
+                    Console.Write($"[ {options[i]} ]     ");
                 }
                 else
                 {
-                    // Unselected items are White
                     Console.ForegroundColor = ConsoleColor.White;
-                    Console.Write($"  {options[i]}     ");
+                    Console.Write($"  {options[i]}       ");
                 }
             }
-            Console.ForegroundColor = ConsoleColor.White; 
 
-            ConsoleKey key = Console.ReadKey(true).Key;
-
-            if (key == ConsoleKey.LeftArrow)
-                selected = (selected - 1 + options.Length) % options.Length;
-            else if (key == ConsoleKey.RightArrow)
-                selected = (selected + 1) % options.Length;
+            var key = Console.ReadKey(true).Key;
+            if (key == ConsoleKey.LeftArrow) selected = 0;
+            else if (key == ConsoleKey.RightArrow) selected = 1;
             else if (key == ConsoleKey.Enter)
             {
-                Console.CursorVisible = true;
-                return selected == 0; // Returns True if Positive (Save/Yes), False if Negative
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.CursorVisible = true; 
+                return selected == 1; // Returns True only if "Save" is selected
             }
         }
     }
+}
+
+// 4. Note Editor 
 /// <summary>
-/// This displays the main menu and handles navigation to Notes, Calendar, or Exit.
+/// Dito nangyayari yung pag-type at pag-edit ng notes. Pwede mo imove gamit ang arrow keys at gumamit ng backspace o delete para magbura. Lagi nitong pinapakita yung cursor mo habang nagsusulat ka, at kapag tapos ka na, pindutin lang ang TAB key para ma-save o lumabas
 /// </summary>
-    void ShowMainMenu()
+
+public class NoteEditor
+{
+    public string EditContent(string initialContent, bool isCreate)
     {
-        int selected = 0;
-        string[] menu = { "Notes", "Calendar and Scheduling", "Exit" };
-
-        while (true)
-        {
-            Console.Clear();
-            Console.ForegroundColor = ConsoleColor.Yellow;
-
-            Console.WriteLine("==============================================");
-            Console.WriteLine("=                  TOTEPAD                   =");
-            Console.WriteLine("==============================================\n\n\n");
-
-            for (int i = 0; i < menu.Length; i++)
-            {
-                if (i == selected)
-                {
-                    Console.ForegroundColor = ConsoleColor.Green;
-                    Console.WriteLine($"[ {menu[i]} ]");
-                    Console.ForegroundColor = ConsoleColor.Yellow;
-                }
-                else
-                    Console.WriteLine($"  {menu[i]}");
-            }
-
-            ConsoleKey key = Console.ReadKey(true).Key;
-
-            if (key == ConsoleKey.UpArrow)
-                selected = (selected - 1 + menu.Length) % menu.Length;
-            else if (key == ConsoleKey.DownArrow)
-                selected = (selected + 1) % menu.Length;
-            else if (key == ConsoleKey.Enter)
-            {
-                if (selected == 0) ShowNotesMenu();
-                else if (selected == 1) ShowCalendar();
-                else break;
-            }
-        }
-    }
-/// <summary>
-/// This displays the notes menu, allowing users to create, view, modify, or delete notes.
-/// </summary>
-    void ShowNotesMenu()
-    {
-        int selected = 0;
-        string[] actions = { "Create", "View", "Modify", "Delete", "Back" };
-
-        while (true)
-        {
-            Console.Clear();
-            Console.ForegroundColor = ConsoleColor.Yellow;
-
-            Console.WriteLine("==============================================");
-            Console.WriteLine("=                 NOTES LIST                 =");
-            Console.WriteLine("==============================================\n");
-
-            Console.ForegroundColor = ConsoleColor.White;
-            if (notes.Count == 0)
-                Console.WriteLine("\n(No notes found)\n\n");
-            else
-            {
-                for (int i = 0; i < notes.Count; i++)
-                    Console.WriteLine($"- {notes[i].Title}");
-            }
-
-            Console.ForegroundColor = ConsoleColor.DarkBlue;
-            Console.WriteLine("\n==============================================");
-            Console.WriteLine("=                 ACTIONS                    =");
-            Console.WriteLine("==============================================");
-
-            for (int i = 0; i < actions.Length; i++)
-            {
-                if (i == selected)
-                {
-                    Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.WriteLine($"[ {actions[i]} ]");
-                    Console.ForegroundColor = ConsoleColor.DarkBlue;
-                }
-                else
-                    Console.WriteLine($"  {actions[i]}");
-            }
-
-            ConsoleKey key = Console.ReadKey(true).Key;
-
-            if (key == ConsoleKey.UpArrow)
-                selected = (selected - 1 + actions.Length) % actions.Length;
-            else if (key == ConsoleKey.DownArrow)
-                selected = (selected + 1) % actions.Length;
-            else if (key == ConsoleKey.Enter)
-            {
-                if (selected == 0) CreateNote();
-                else if (selected == 1) ViewNote();
-                else if (selected == 2) ModifyNote();
-                else if (selected == 3) DeleteNote();
-                else break;
-            }
-        }
-    }
-/// <summary>
-/// This feature allows users to create a new note with a title and content.
-/// </summary>
-    void CreateNote()
-    {
-        Console.Clear();
-        Console.ForegroundColor = ConsoleColor.Cyan;
-
-        Console.Write("Title: ");
-        string title = Console.ReadLine()?.Trim() ?? "";
-        if (string.IsNullOrEmpty(title))
-        {
-            Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine("Title cannot be empty. Press any key to return...");
-            Console.ReadKey(true);
-            return;
-        }
-        Console.ForegroundColor = ConsoleColor.DarkYellow;
-        Console.WriteLine("\n======================================================================");
-        Console.WriteLine("= Arrow Keys: Move | Backspace: Delete | TAB: Finish Editing    =");
-        Console.WriteLine("======================================================================\n");
-
-        string content = "";
-        int cursorPos = 0;
+        Console.CursorVisible = true;
+        StringBuilder sb = new StringBuilder(initialContent);
+        int cursorPos = sb.Length;
         int editStartLine = Console.CursorTop;
-        
-        Console.ForegroundColor = ConsoleColor.White;
-        Console.Write("> ");
-        int inputStartCol = Console.CursorLeft;
 
-        // Typing Loop
+        Render(sb, cursorPos, editStartLine, isCreate);
+
         while (true)
         {
-            ConsoleKeyInfo keyInfo = Console.ReadKey(intercept: true);
+            ConsoleKeyInfo keyInfo = Console.ReadKey(true);
 
-            // TAB moves to the Save/Cancel menu
-            if (keyInfo.Key == ConsoleKey.Tab)
-            {
-                break; 
-            }
+            if (keyInfo.Key == ConsoleKey.Tab) break;
 
-            if (keyInfo.Key == ConsoleKey.LeftArrow)
+            if (keyInfo.Key == ConsoleKey.LeftArrow) cursorPos = Math.Max(0, cursorPos - 1);
+            else if (keyInfo.Key == ConsoleKey.RightArrow) cursorPos = Math.Min(sb.Length, cursorPos + 1);
+            else if (keyInfo.Key == ConsoleKey.Backspace && cursorPos > 0)
             {
-                if (cursorPos > 0)
-                {
-                    cursorPos--;
-                    UpdateCursorDisplay(content, cursorPos, editStartLine, true);
-                }
+                sb.Remove(cursorPos - 1, 1);
+                cursorPos--;
+                Render(sb, cursorPos, editStartLine, isCreate);
             }
-            else if (keyInfo.Key == ConsoleKey.RightArrow)
+            else if (keyInfo.Key == ConsoleKey.Delete && cursorPos < sb.Length)
             {
-                if (cursorPos < content.Length)
-                {
-                    cursorPos++;
-                    UpdateCursorDisplay(content, cursorPos, editStartLine, true);
-                }
-            }
-            else if (keyInfo.Key == ConsoleKey.UpArrow)
-            {
-                // Move cursor up one line
-                int lineStart = content.LastIndexOf('\n', cursorPos - 1);
-                if (lineStart >= 0)
-                {
-                    int prevLineStart = content.LastIndexOf('\n', lineStart - 1) + 1;
-                    int posInLine = cursorPos - lineStart - 1;
-                    int prevLineLength = lineStart - prevLineStart;
-                    cursorPos = prevLineStart + Math.Min(posInLine, prevLineLength);
-                    UpdateCursorDisplay(content, cursorPos, editStartLine, true);
-                }
-            }
-            else if (keyInfo.Key == ConsoleKey.DownArrow)
-            {
-                // Move cursor down one line
-                int currentLineStart = content.LastIndexOf('\n', cursorPos) + 1;
-                int currentLineEnd = content.IndexOf('\n', currentLineStart);
-                
-                if (currentLineEnd >= 0 && currentLineEnd + 1 < content.Length)
-                {
-                    int nextLineStart = currentLineEnd + 1;
-                    int nextLineEnd = content.IndexOf('\n', nextLineStart);
-                    if (nextLineEnd == -1) nextLineEnd = content.Length;
-                    
-                    int posInLine = cursorPos - currentLineStart;
-                    int nextLineLength = nextLineEnd - nextLineStart;
-                    cursorPos = nextLineStart + Math.Min(posInLine, nextLineLength);
-                    UpdateCursorDisplay(content, cursorPos, editStartLine, true);
-                }
-            }
-            else if (keyInfo.Key == ConsoleKey.Home)
-            {
-                // Move to start of line
-                int lineStart = content.LastIndexOf('\n', cursorPos) + 1;
-                cursorPos = lineStart;
-                UpdateCursorDisplay(content, cursorPos, editStartLine, true);
-            }
-            else if (keyInfo.Key == ConsoleKey.End)
-            {
-                // Move to end of line
-                int lineEnd = content.IndexOf('\n', cursorPos);
-                if (lineEnd == -1) lineEnd = content.Length;
-                cursorPos = lineEnd;
-                UpdateCursorDisplay(content, cursorPos, editStartLine, true);
+                sb.Remove(cursorPos, 1);
+                Render(sb, cursorPos, editStartLine, isCreate);
             }
             else if (keyInfo.Key == ConsoleKey.Enter)
             {
-                content = content.Insert(cursorPos, "\n");
+                sb.Insert(cursorPos, "\n");
                 cursorPos++;
-                Console.ForegroundColor = ConsoleColor.White;
-                RedrawContent(content, cursorPos, editStartLine, true);
-            }
-            else if (keyInfo.Key == ConsoleKey.Backspace)
-            {
-                if (cursorPos > 0)
-                {
-                    content = content.Remove(cursorPos - 1, 1);
-                    cursorPos--;
-                    Console.ForegroundColor = ConsoleColor.White;
-                    RedrawContent(content, cursorPos, editStartLine, true);
-                }
-            }
-            else if (keyInfo.Key == ConsoleKey.Delete)
-            {
-                if (cursorPos < content.Length)
-                {
-                    content = content.Remove(cursorPos, 1);
-                    Console.ForegroundColor = ConsoleColor.White;
-                    RedrawContent(content, cursorPos, editStartLine, true);
-                }
+                Render(sb, cursorPos, editStartLine, isCreate);
             }
             else if (!char.IsControl(keyInfo.KeyChar))
             {
-                content = content.Insert(cursorPos, keyInfo.KeyChar.ToString());
+                sb.Insert(cursorPos, keyInfo.KeyChar);
                 cursorPos++;
-                Console.ForegroundColor = ConsoleColor.White;
-                RedrawContent(content, cursorPos, editStartLine, true);
+                Render(sb, cursorPos, editStartLine, isCreate);
             }
+            
+            UpdateCursor(sb, cursorPos, editStartLine, isCreate);
         }
 
-        // Show the decision menu (Green Save / Red Cancel with the eme eme effect XD)
-        bool save = ShowDecisionMenu("Select Action:\n\n", "Save", "Cancel");
-
-        if (save)
-        {
-            notes.Add(new Note { Title = title, Content = content });
-            File.WriteAllText(Path.Combine(notesFolder, $"{title}.txt"), content);
-            Console.ForegroundColor = ConsoleColor.DarkGreen;
-            Console.WriteLine("\n\nNote saved! Press any key go back...");
-        }
-        else
-        {
-            Console.ForegroundColor = ConsoleColor.DarkRed;
-            Console.WriteLine("\n\nNote Discarded. Press any key to go back...");
-        }
-        Console.ReadKey(true);
+        return sb.ToString();
     }
-/// <summary>
-/// This feature allows users to view existing notes by selecting from their list.
-/// </summary>
-    void ViewNote()
-    {
-        if (notes.Count == 0) return;
 
+    private void Render(StringBuilder sb, int cursorPos, int startLine, bool isCreate)
+    {
+        Console.SetCursorPosition(0, startLine);
+        // Clear area
+        for (int i = 0; i < 15; i++) Console.WriteLine(new string(' ', Console.WindowWidth));
+        Console.SetCursorPosition(0, startLine);
+
+        Console.ForegroundColor = ConsoleColor.White;
+        string prompt = isCreate ? "> " : "";
+        string content = sb.ToString();
+        
+        if (isCreate) Console.Write(prompt);
+        Console.Write(content.Replace("\n", "\n" + prompt));
+        
+        UpdateCursor(sb, cursorPos, startLine, isCreate);
+    }
+
+    private void UpdateCursor(StringBuilder sb, int cursorPos, int startLine, bool isCreate)
+    {
+        string currentText = sb.ToString().Substring(0, cursorPos);
+        int lines = currentText.Count(c => c == '\n');
+        int lastNewLine = currentText.LastIndexOf('\n');
+        int col = (cursorPos - (lastNewLine + 1)) + (isCreate ? 2 : 0);
+        
+        Console.SetCursorPosition(col, startLine + lines);
+    }
+}
+
+// 5. Main Application
+/// <summary>
+/// Ito ang pinaka-utak ng app na nagpapatakbo sa lahat. Siya ang may hawak ng mga menu at calendar, at siya rin ang nag-uutos sa NoteService at NoteEditor para gumana sila. Hindi titigil ang app hangga’t hindi ka nag-e-exit, kaya pwede kang gumawa, tumingin, mag-ayos, o magbura ng notes kahit kailan mo gusto
+/// </summary>
+
+class TotePad
+{
+    private NoteService _service = new();
+    private List<Note> _notes = new();
+    private NoteEditor _editor = new();
+
+    public void Run()
+    {
+        _service.EnsureDirectoryExists();
+        _notes = _service.LoadAllNotes();
+        
         while (true)
         {
-            Console.Clear();
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("Select note number (or type '0' to go back):\n\n");
-            Console.ForegroundColor = ConsoleColor.White;
+            MenuRenderer.DrawHeader("TOTEPAD MAIN MENU");
+            int choice = MenuRenderer.ShowArrowMenu(new[] { "Notes", "Calendar", "Exit" });
 
-            for (int i = 0; i < notes.Count; i++)
-                Console.WriteLine($"{i + 1}. {notes[i].Title}");
-
-            Console.Write("\n> ");
-            string input = Console.ReadLine()?.Trim() ?? "";
-
-            if (input == "0") break;
-
-            if (int.TryParse(input, out int choice) && choice > 0 && choice <= notes.Count)
-            {
-                Console.Clear();
-                Console.ForegroundColor = ConsoleColor.Blue;
-                Console.WriteLine($"=== {notes[choice - 1].Title} ===");
-                Console.ForegroundColor = ConsoleColor.White;
-                Console.WriteLine($"\n{notes[choice - 1].Content}");
-                Console.WriteLine("\n\n(Press any key to return to list)");
-                Console.ReadKey(true);
-            }
-            else
-            {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Invalid selection. Please enter a valid number.");
-                Thread.Sleep(1000); 
-            }
+            if (choice == 0) NotesMenu();
+            else if (choice == 1) ShowCalendar();
+            else break;
         }
     }
-/// <summary>
-/// This feature allows users to modify existing notes.
-/// </summary>
-    void ModifyNote()
+
+    /// <summary>
+    /// This displays the notes menu, allowing users to create, view, modify, or delete notes.
+    /// </summary>
+    void NotesMenu()
     {
-        if (notes.Count == 0)
+        while (true)
         {
-            Console.Clear();
-            Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine("No notes to modify. Press any key to exit...");
-            Console.ReadKey(true);
+            MenuRenderer.DrawHeader("NOTES LIST");
+            if (!_notes.Any()) Console.WriteLine("(No notes found)\n");
+            else _notes.ForEach(n => Console.WriteLine($"- {n.Title}"));
+
+            Console.WriteLine("\n--- Actions ---");
+            int action = MenuRenderer.ShowArrowMenu(new[] { "Create", "View", "Modify", "Delete", "Back" });
+
+            if (action == 0) CreateNote();
+            else if (action == 1) ViewNote();
+            else if (action == 2) ModifyNote();
+            else if (action == 3) DeleteNote();
+            else break;
+        }
+    }
+    /// <summary>
+    /// This feature allows users to create a new note with a title and content
+    /// </summary>
+    void CreateNote()
+    {
+        MenuRenderer.DrawHeader("CREATE NEW NOTE");
+        MenuRenderer.InstructionHeader("Type your note content. Press TAB when done");
+        Console.CursorVisible = true;
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.Write("Title: ");
+        string title = Console.ReadLine()?.Trim() ?? "";
+        Console.ForegroundColor = ConsoleColor.White;
+        
+        if (string.IsNullOrEmpty(title) || _notes.Any(n => n.Title.Equals(title, StringComparison.OrdinalIgnoreCase)))
+        {
+            MenuRenderer.ShowErrorMessage("Title empty or already exists!");
             return;
         }
 
-        Console.Clear();
-        Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine("Select note to modify:\n\n");
-        for (int i = 0; i < notes.Count; i++)
-            Console.WriteLine($"{i + 1}. {notes[i].Title}");
-
-        Console.Write("\n> ");
-        if (int.TryParse(Console.ReadLine(), out int choice) && choice > 0 && choice <= notes.Count)
+        string content = _editor.EditContent("", true);
+        if (MenuRenderer.ShowDecisionMenu("Save this note?", "Cancel", "Save"))
         {
-            Note noteToEdit = notes[choice - 1];
-            
-            Console.Clear();
-            Console.ForegroundColor = ConsoleColor.Blue;
-            Console.WriteLine($"Editing: {noteToEdit.Title}\n");
-            Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine("====================================================================");
-            Console.WriteLine("= Arrow Keys: Move | Backspace: Delete | TAB: Finish Editing     =");
-            Console.WriteLine("====================================================================\n");
-            
-            string content = noteToEdit.Content;
-            int cursorPos = content.Length;
-            int editStartLine = Console.CursorTop;
-            
-            // Display initial content
-            Console.ForegroundColor = ConsoleColor.White;
-            Console.Write(content);
-            UpdateCursorDisplay(content, cursorPos, editStartLine);
-            
-            // Editing Loop
-            while (true)
-            {
-                Console.ForegroundColor = ConsoleColor.White;
-                ConsoleKeyInfo keyInfo = Console.ReadKey(intercept: true);
-                Console.ForegroundColor = ConsoleColor.White;
-
-                if (keyInfo.Key == ConsoleKey.Tab)
-                {
-                    break; // Exit typing, go to menu
-                }
-
-                if (keyInfo.Key == ConsoleKey.LeftArrow)
-                {
-                    if (cursorPos > 0)
-                    {
-                        cursorPos--;
-                        UpdateCursorDisplay(content, cursorPos, editStartLine);
-                    }
-                }
-                else if (keyInfo.Key == ConsoleKey.RightArrow)
-                {
-                    if (cursorPos < content.Length)
-                    {
-                        cursorPos++;
-                        UpdateCursorDisplay(content, cursorPos, editStartLine);
-                    }
-                }
-                else if (keyInfo.Key == ConsoleKey.UpArrow)
-                {
-                    // Move cursor up one line
-                    int lineStart = content.LastIndexOf('\n', cursorPos - 1);
-                    if (lineStart >= 0)
-                    {
-                        int prevLineStart = content.LastIndexOf('\n', lineStart - 1) + 1;
-                        int posInLine = cursorPos - lineStart - 1;
-                        int prevLineLength = lineStart - prevLineStart;
-                        cursorPos = prevLineStart + Math.Min(posInLine, prevLineLength);
-                        UpdateCursorDisplay(content, cursorPos, editStartLine);
-                    }
-                }
-                else if (keyInfo.Key == ConsoleKey.DownArrow)
-                {
-                    // Move cursor down one line
-                    int currentLineStart = content.LastIndexOf('\n', cursorPos) + 1;
-                    int currentLineEnd = content.IndexOf('\n', currentLineStart);
-                    
-                    if (currentLineEnd >= 0 && currentLineEnd + 1 < content.Length)
-                    {
-                        int nextLineStart = currentLineEnd + 1;
-                        int nextLineEnd = content.IndexOf('\n', nextLineStart);
-                        if (nextLineEnd == -1) nextLineEnd = content.Length;
-                        
-                        int posInLine = cursorPos - currentLineStart;
-                        int nextLineLength = nextLineEnd - nextLineStart;
-                        cursorPos = nextLineStart + Math.Min(posInLine, nextLineLength);
-                        UpdateCursorDisplay(content, cursorPos, editStartLine);
-                    }
-                }
-                else if (keyInfo.Key == ConsoleKey.Home)
-                {
-                    // Move to start of line
-                    int lineStart = content.LastIndexOf('\n', cursorPos) + 1;
-                    cursorPos = lineStart;
-                    UpdateCursorDisplay(content, cursorPos, editStartLine);
-                }
-                else if (keyInfo.Key == ConsoleKey.End)
-                {
-                    // Move to end of line
-                    int lineEnd = content.IndexOf('\n', cursorPos);
-                    if (lineEnd == -1) lineEnd = content.Length;
-                    cursorPos = lineEnd;
-                    UpdateCursorDisplay(content, cursorPos, editStartLine);
-                }
-                else if (keyInfo.Key == ConsoleKey.Enter)
-                {
-                    content = content.Insert(cursorPos, "\n");
-                    cursorPos++;
-                    Console.ForegroundColor = ConsoleColor.White;
-                    RedrawContent(content, cursorPos, editStartLine);
-                }
-                else if (keyInfo.Key == ConsoleKey.Backspace)
-                {
-                    if (cursorPos > 0)
-                    {
-                        content = content.Remove(cursorPos - 1, 1);
-                        cursorPos--;
-                        Console.ForegroundColor = ConsoleColor.White;
-                        RedrawContent(content, cursorPos, editStartLine);
-                    }
-                }
-                else if (keyInfo.Key == ConsoleKey.Delete)
-                {
-                    if (cursorPos < content.Length)
-                    {
-                        content = content.Remove(cursorPos, 1);
-                        Console.ForegroundColor = ConsoleColor.White;
-                        RedrawContent(content, cursorPos, editStartLine);
-                    }
-                }
-                else if (!char.IsControl(keyInfo.KeyChar))
-                {
-                    content = content.Insert(cursorPos, keyInfo.KeyChar.ToString());
-                    cursorPos++;
-                    Console.ForegroundColor = ConsoleColor.White;
-                    Console.Write(keyInfo.KeyChar);
-                    UpdateCursorDisplay(content, cursorPos, editStartLine);
-                }
-            }
-            
-            // Show decision menu
-            bool save = ShowDecisionMenu("\nSave changes?\n", "Save", "Cancel");
-
-            if (save)
-            {
-                noteToEdit.Content = content;
-                File.WriteAllText(Path.Combine(notesFolder, $"{noteToEdit.Title}.txt"), content);
-                Console.ForegroundColor = ConsoleColor.DarkGreen;
-                Console.WriteLine("\n\nChanges saved! Press any key to exit...");
-            }
-            else
-            {
-                Console.ForegroundColor = ConsoleColor.DarkRed;
-                Console.WriteLine("\n\nChanges discarded. Press any key to go exit...");
-            }
-            Console.ReadKey(true);
-        }
-        else
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("Invalid selection. Press any key to exit...");
-            Console.ReadKey(true);
+            var newNote = new Note(title, content);
+            if (_service.SaveNote(newNote)) _notes.Add(newNote);
         }
     }
 
-    void UpdateCursorDisplay(string content, int cursorPos, int editStartLine, bool isCreate = false)
+    /// <summary>
+    /// This feature allows users to view existing notes by selecting from their list.
+    /// </summary>
+    void ViewNote()
     {
-        Console.ForegroundColor = ConsoleColor.White;
+        if (!_notes.Any()) return;
+        MenuRenderer.DrawHeader("VIEW NOTE");
+        MenuRenderer.InstructionHeader("Use arrow keys to select a note. Press Enter to view");    
+        int index = MenuRenderer.ShowArrowMenu(_notes.Select(n => n.Title).ToArray());
         
-        // Calculate where the cursor should be
-        int lineCount = 0;
-        int lastNewlinePos = 0;
-        
-        for (int i = 0; i < cursorPos; i++)
-        {
-            if (content[i] == '\n')
-            {
-                lineCount++;
-                lastNewlinePos = i + 1;
-            }
-        }
-        
-        int posInLine = cursorPos - lastNewlinePos;
-        int cursorLine = editStartLine + lineCount;
-        int cursorCol = posInLine;
-        
-        // Add offset for ">" prompt on first line
-        if (isCreate && lineCount == 0)
-        {
-            cursorCol += 2;
-        }
-        
-        Console.ForegroundColor = ConsoleColor.White;
-        Console.SetCursorPosition(cursorCol, cursorLine);
-        Console.ForegroundColor = ConsoleColor.White;
+        MenuRenderer.DrawHeader(_notes[index].Title);
+        Console.WriteLine(_notes[index].Content);
+        Console.WriteLine("\n\n(Press any key to return)");
+        Console.ReadKey(true);
     }
 
-    void RedrawContent(string content, int cursorPos, int editStartLine, bool isCreate = false)
+    /// <summary>
+    /// This feature allows users to modify existing notes.
+    /// </summary>
+    void ModifyNote()
     {
-        Console.ForegroundColor = ConsoleColor.White;
-        
-        // Clear everything from edit start
-        for (int i = 0; i < Console.BufferHeight - editStartLine; i++)
+        if (!_notes.Any()) return;
+        MenuRenderer.DrawHeader("SELECT NOTE TO MODIFY");
+        MenuRenderer.InstructionHeader("Use arrow keys to select a note. Press Enter to edit");
+        int index = MenuRenderer.ShowArrowMenu(_notes.Select(n => n.Title).ToArray());
+
+        string newContent = _editor.EditContent(_notes[index].Content, false);
+        if (MenuRenderer.ShowDecisionMenu("Save changes?", "Cancel", "Save"))
         {
-            Console.SetCursorPosition(0, editStartLine + i);
-            Console.ForegroundColor = ConsoleColor.White;
-            Console.Write(new string(' ', Console.WindowWidth));
+            _notes[index] = _notes[index] with { Content = newContent };
+            _service.SaveNote(_notes[index]);
         }
-        
-        // Redraw content
-        Console.SetCursorPosition(0, editStartLine);
-        Console.ForegroundColor = ConsoleColor.White;
-        
-        if (isCreate)
-        {
-            Console.Write("> ");
-        }
-        
-        for (int i = 0; i < content.Length; i++)
-        {
-            Console.ForegroundColor = ConsoleColor.White;
-            if (content[i] == '\n')
-            {
-                Console.WriteLine();
-                if (isCreate) Console.Write("> ");
-            }
-            else
-            {
-                Console.Write(content[i]);
-            }
-        }
-        
-        Console.ForegroundColor = ConsoleColor.White;
-        
-        // Update cursor position
-        UpdateCursorDisplay(content, cursorPos, editStartLine, isCreate);
     }
+
     /// <summary>
     /// This feature allows users to delete whatever note they want.
     /// </summary>
     void DeleteNote()
     {
-        if (notes.Count == 0)
+        if (!_notes.Any()) return;
+        MenuRenderer.DrawHeader("SELECT NOTE TO DELETE");
+        MenuRenderer.InstructionHeader("Use arrow keys to select a note. Press Enter to delete");
+        int index = MenuRenderer.ShowArrowMenu(_notes.Select(n => n.Title).ToArray());
+
+        if (MenuRenderer.ShowDecisionMenu($"Delete '{_notes[index].Title}'?", "Cancel", "Delete"))
         {
-            Console.Clear();
-            Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine("No notes found to delete. Press any key to exit...");
-            Console.ReadKey(true);
-            return;
+            _service.DeleteNote(_notes[index].Title);
+            _notes.RemoveAt(index);
         }
-
-        Console.Clear();
-        Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine("Select which note number to delete:\n"); //The user can select which note to delete
-        
-        Console.ForegroundColor = ConsoleColor.White;
-        for (int i = 0; i < notes.Count; i++)
-            Console.WriteLine($"{i + 1}. {notes[i].Title}");
-
-        Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.Write("\n> ");
-
-        if (!int.TryParse(Console.ReadLine(), out int choice) || choice <= 0 || choice > notes.Count)
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("Invalid choice. Press any key to return...");
-            Console.ReadKey(true);
-            return;
-        }
-
-        var note = notes[choice - 1];
-
-        // Confirmation Menu (Uses same Green/Red logic)
-        // (Dark Red and Dark Green pag may action na pagpipilian si user tas normal red and green naman pag wala :p)
-        bool confirm = ShowDecisionMenu($"Are you sure you want to delete '{note.Title}'?\n\n", "Yes", "No");
-
-        if (confirm)
-        {
-            string path = Path.Combine(notesFolder, $"{note.Title}.txt");
-            if (File.Exists(path)) File.Delete(path);
-            notes.RemoveAt(choice - 1);
-            Console.ForegroundColor = ConsoleColor.DarkGreen;
-            Console.WriteLine("\n\nNote deleted successfully.");
-        }
-        else
-        {
-            Console.ForegroundColor = ConsoleColor.DarkRed;
-            Console.WriteLine("\n\nDeletion cancelled.");
-        }
-        
-        Console.ReadKey(true);
     }
 
     void ShowCalendar()
     {
-        Console.Clear();
-        Console.ForegroundColor = ConsoleColor.White;
-
-        Console.WriteLine("==============================================");
-        Console.WriteLine("=            CALENDAR AND SCHEDULING         =");
-        Console.WriteLine("==============================================\n");
-
-        Console.WriteLine("(Under construction :p)\n");
-        Console.WriteLine("Press any key to return to the main menu...");
+        MenuRenderer.DrawHeader("CALENDAR");
+        MenuRenderer.InstructionHeader(" Press any key to return.");
+        Console.WriteLine("UNDER CONSTRUVTION :PPPPPP)");
         Console.ReadKey(true);
     }
 
-    // dito casuco ayusin mo nag ka letche letche ka stress, ako na modify tas delete hehe
-    
-    static void Main()
-    {
-        TotePad app = new TotePad();
-        app.StartupSequence();
-        app.LoadNotes();
-        app.ShowMainMenu();
-    }
+    static void Main() => new TotePad().Run();
 }
