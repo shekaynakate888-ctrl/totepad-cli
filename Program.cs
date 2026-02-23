@@ -1,20 +1,17 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Threading;
 
 namespace Totepad;
 
 class Note
 {
-    public string Title { get; set; } = string.Empty;
-    public string Content { get; set; } = string.Empty;
+    public string Title { get; set; }
+    public string Content { get; set; }
 }
 
-class TotePad
+class TotePadApp
 {
-    string notesFolder = "Notes";
-    List<Note> notes = new List<Note>();
+    readonly string notesFolder = "Notes";
+    readonly List<Note> notes = new List<Note>();
 
     void StartupSequence()
     {
@@ -482,7 +479,7 @@ class TotePad
 
     static void Main()
     {
-        TotePad app = new TotePad();
+        TotePadApp app = new TotePadApp();
         app.StartupSequence();
         app.LoadNotes();
         app.ShowMainMenu();
