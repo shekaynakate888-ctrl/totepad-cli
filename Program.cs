@@ -1,18 +1,9 @@
-﻿using System;
-<<<<<<< HEAD
-=======
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.Threading;
->>>>>>> cddf599dc7b30fe8ac40eb0487a3ddad6c7169a6
-
-namespace Totepad;
+﻿namespace Totepad;
 
 class Note
 {
-    public string Title { get; set; }
-    public string Content { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
 }
 
 class TotePadApp
