@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TOTEPAD FINALS 1.0")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3aea704915f405588aa59f58ef007aaa395aaf19")]
 [assembly: System.Reflection.AssemblyProductAttribute("TOTEPAD FINALS 1.0")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TOTEPAD FINALS 1.0")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
