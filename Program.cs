@@ -1,4 +1,11 @@
 ﻿using System;
+<<<<<<< HEAD
+=======
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Threading;
+>>>>>>> cddf599dc7b30fe8ac40eb0487a3ddad6c7169a6
 
 namespace Totepad;
 
@@ -30,7 +37,7 @@ class TotePadApp
         Console.ReadKey(true);
     }
 /// <summary>
-/// This loads existing notes from the Notes folder.
+/// This loads existing notes from the Note folder.
 /// </summary>
     void LoadNotes()
     {
@@ -48,7 +55,6 @@ class TotePadApp
             });
         }
     }
-
     bool ShowDecisionMenu(string prompt, string positiveOption, string negativeOption)
     {
         int selected = 0; // 0 = Positive (Green), 1 = Negative (Red)
@@ -221,18 +227,21 @@ class TotePadApp
         }
         Console.ForegroundColor = ConsoleColor.DarkYellow;
         Console.WriteLine("\n======================================================================");
-        Console.WriteLine("= Write your note below. (Press TAB when finished to select options) =");
+        Console.WriteLine("= Arrow Keys: Move | Backspace: Delete | TAB: Finish Editing    =");
         Console.WriteLine("======================================================================\n");
 
         string content = "";
-        ConsoleKeyInfo keyInfo;
+        int cursorPos = 0;
+        int editStartLine = Console.CursorTop;
+        
         Console.ForegroundColor = ConsoleColor.White;
         Console.Write("> ");
+        int inputStartCol = Console.CursorLeft;
 
         // Typing Loop
         while (true)
         {
-            keyInfo = Console.ReadKey(intercept: true);
+            ConsoleKeyInfo keyInfo = Console.ReadKey(intercept: true);
 
             // TAB moves to the Save/Cancel menu
             if (keyInfo.Key == ConsoleKey.Tab)
@@ -240,25 +249,100 @@ class TotePadApp
                 break; 
             }
 
-            if (keyInfo.Key == ConsoleKey.Enter)
+            if (keyInfo.Key == ConsoleKey.LeftArrow)
             {
-                content += "\n";
-                Console.WriteLine();
-                Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.Write("> ");
+                if (cursorPos > 0)
+                {
+                    cursorPos--;
+                    UpdateCursorDisplay(content, cursorPos, editStartLine, true);
+                }
+            }
+            else if (keyInfo.Key == ConsoleKey.RightArrow)
+            {
+                if (cursorPos < content.Length)
+                {
+                    cursorPos++;
+                    UpdateCursorDisplay(content, cursorPos, editStartLine, true);
+                }
+            }
+            else if (keyInfo.Key == ConsoleKey.UpArrow)
+            {
+                // Move cursor up one line
+                int lineStart = content.LastIndexOf('\n', cursorPos - 1);
+                if (lineStart >= 0)
+                {
+                    int prevLineStart = content.LastIndexOf('\n', lineStart - 1) + 1;
+                    int posInLine = cursorPos - lineStart - 1;
+                    int prevLineLength = lineStart - prevLineStart;
+                    cursorPos = prevLineStart + Math.Min(posInLine, prevLineLength);
+                    UpdateCursorDisplay(content, cursorPos, editStartLine, true);
+                }
+            }
+            else if (keyInfo.Key == ConsoleKey.DownArrow)
+            {
+                // Move cursor down one line
+                int currentLineStart = content.LastIndexOf('\n', cursorPos) + 1;
+                int currentLineEnd = content.IndexOf('\n', currentLineStart);
+                
+                if (currentLineEnd >= 0 && currentLineEnd + 1 < content.Length)
+                {
+                    int nextLineStart = currentLineEnd + 1;
+                    int nextLineEnd = content.IndexOf('\n', nextLineStart);
+                    if (nextLineEnd == -1) nextLineEnd = content.Length;
+                    
+                    int posInLine = cursorPos - currentLineStart;
+                    int nextLineLength = nextLineEnd - nextLineStart;
+                    cursorPos = nextLineStart + Math.Min(posInLine, nextLineLength);
+                    UpdateCursorDisplay(content, cursorPos, editStartLine, true);
+                }
+            }
+            else if (keyInfo.Key == ConsoleKey.Home)
+            {
+                // Move to start of line
+                int lineStart = content.LastIndexOf('\n', cursorPos) + 1;
+                cursorPos = lineStart;
+                UpdateCursorDisplay(content, cursorPos, editStartLine, true);
+            }
+            else if (keyInfo.Key == ConsoleKey.End)
+            {
+                // Move to end of line
+                int lineEnd = content.IndexOf('\n', cursorPos);
+                if (lineEnd == -1) lineEnd = content.Length;
+                cursorPos = lineEnd;
+                UpdateCursorDisplay(content, cursorPos, editStartLine, true);
+            }
+            else if (keyInfo.Key == ConsoleKey.Enter)
+            {
+                content = content.Insert(cursorPos, "\n");
+                cursorPos++;
+                Console.ForegroundColor = ConsoleColor.White;
+                RedrawContent(content, cursorPos, editStartLine, true);
             }
             else if (keyInfo.Key == ConsoleKey.Backspace)
             {
-                if (content.Length > 0 && Console.CursorLeft > 2)
+                if (cursorPos > 0)
                 {
-                    content = content.Remove(content.Length - 1);
-                    Console.Write("\b \b");
+                    content = content.Remove(cursorPos - 1, 1);
+                    cursorPos--;
+                    Console.ForegroundColor = ConsoleColor.White;
+                    RedrawContent(content, cursorPos, editStartLine, true);
                 }
             }
-            else
+            else if (keyInfo.Key == ConsoleKey.Delete)
             {
-                content += keyInfo.KeyChar;
-                Console.Write(keyInfo.KeyChar);
+                if (cursorPos < content.Length)
+                {
+                    content = content.Remove(cursorPos, 1);
+                    Console.ForegroundColor = ConsoleColor.White;
+                    RedrawContent(content, cursorPos, editStartLine, true);
+                }
+            }
+            else if (!char.IsControl(keyInfo.KeyChar))
+            {
+                content = content.Insert(cursorPos, keyInfo.KeyChar.ToString());
+                cursorPos++;
+                Console.ForegroundColor = ConsoleColor.White;
+                RedrawContent(content, cursorPos, editStartLine, true);
             }
         }
 
@@ -347,42 +431,130 @@ class TotePadApp
             Console.Clear();
             Console.ForegroundColor = ConsoleColor.Blue;
             Console.WriteLine($"Editing: {noteToEdit.Title}\n");
-            Console.ForegroundColor = ConsoleColor.DarkYellow;
-            Console.WriteLine("\n====================================================================");
-            Console.WriteLine("= Write your note below. (Press TAB when finished to select options) =");
-            Console.WriteLine("======================================================================\n");
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine("====================================================================");
+            Console.WriteLine("= Arrow Keys: Move | Backspace: Delete | TAB: Finish Editing     =");
+            Console.WriteLine("====================================================================\n");
+            
             string content = noteToEdit.Content;
-            Console.Write(content); 
-
+            int cursorPos = content.Length;
+            int editStartLine = Console.CursorTop;
+            
+            // Display initial content
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.Write(content);
+            UpdateCursorDisplay(content, cursorPos, editStartLine);
+            
             // Editing Loop
             while (true)
             {
+                Console.ForegroundColor = ConsoleColor.White;
                 ConsoleKeyInfo keyInfo = Console.ReadKey(intercept: true);
+                Console.ForegroundColor = ConsoleColor.White;
 
                 if (keyInfo.Key == ConsoleKey.Tab)
                 {
                     break; // Exit typing, go to menu
                 }
 
-                if (keyInfo.Key == ConsoleKey.Enter)
+                if (keyInfo.Key == ConsoleKey.LeftArrow)
                 {
-                    content += "\n";
-                    Console.WriteLine();
+                    if (cursorPos > 0)
+                    {
+                        cursorPos--;
+                        UpdateCursorDisplay(content, cursorPos, editStartLine);
+                    }
+                }
+                else if (keyInfo.Key == ConsoleKey.RightArrow)
+                {
+                    if (cursorPos < content.Length)
+                    {
+                        cursorPos++;
+                        UpdateCursorDisplay(content, cursorPos, editStartLine);
+                    }
+                }
+                else if (keyInfo.Key == ConsoleKey.UpArrow)
+                {
+                    // Move cursor up one line
+                    int lineStart = content.LastIndexOf('\n', cursorPos - 1);
+                    if (lineStart >= 0)
+                    {
+                        int prevLineStart = content.LastIndexOf('\n', lineStart - 1) + 1;
+                        int posInLine = cursorPos - lineStart - 1;
+                        int prevLineLength = lineStart - prevLineStart;
+                        cursorPos = prevLineStart + Math.Min(posInLine, prevLineLength);
+                        UpdateCursorDisplay(content, cursorPos, editStartLine);
+                    }
+                }
+                else if (keyInfo.Key == ConsoleKey.DownArrow)
+                {
+                    // Move cursor down one line
+                    int currentLineStart = content.LastIndexOf('\n', cursorPos) + 1;
+                    int currentLineEnd = content.IndexOf('\n', currentLineStart);
+                    
+                    if (currentLineEnd >= 0 && currentLineEnd + 1 < content.Length)
+                    {
+                        int nextLineStart = currentLineEnd + 1;
+                        int nextLineEnd = content.IndexOf('\n', nextLineStart);
+                        if (nextLineEnd == -1) nextLineEnd = content.Length;
+                        
+                        int posInLine = cursorPos - currentLineStart;
+                        int nextLineLength = nextLineEnd - nextLineStart;
+                        cursorPos = nextLineStart + Math.Min(posInLine, nextLineLength);
+                        UpdateCursorDisplay(content, cursorPos, editStartLine);
+                    }
+                }
+                else if (keyInfo.Key == ConsoleKey.Home)
+                {
+                    // Move to start of line
+                    int lineStart = content.LastIndexOf('\n', cursorPos) + 1;
+                    cursorPos = lineStart;
+                    UpdateCursorDisplay(content, cursorPos, editStartLine);
+                }
+                else if (keyInfo.Key == ConsoleKey.End)
+                {
+                    // Move to end of line
+                    int lineEnd = content.IndexOf('\n', cursorPos);
+                    if (lineEnd == -1) lineEnd = content.Length;
+                    cursorPos = lineEnd;
+                    UpdateCursorDisplay(content, cursorPos, editStartLine);
+                }
+                else if (keyInfo.Key == ConsoleKey.Enter)
+                {
+                    content = content.Insert(cursorPos, "\n");
+                    cursorPos++;
+                    Console.ForegroundColor = ConsoleColor.White;
+                    RedrawContent(content, cursorPos, editStartLine);
                 }
                 else if (keyInfo.Key == ConsoleKey.Backspace)
                 {
-                    if (content.Length > 0)
+                    if (cursorPos > 0)
                     {
-                        content = content.Remove(content.Length - 1);
-                        Console.Write("\b \b");
+                        content = content.Remove(cursorPos - 1, 1);
+                        cursorPos--;
+                        Console.ForegroundColor = ConsoleColor.White;
+                        RedrawContent(content, cursorPos, editStartLine);
+                    }
+                }
+                else if (keyInfo.Key == ConsoleKey.Delete)
+                {
+                    if (cursorPos < content.Length)
+                    {
+                        content = content.Remove(cursorPos, 1);
+                        Console.ForegroundColor = ConsoleColor.White;
+                        RedrawContent(content, cursorPos, editStartLine);
                     }
                 }
                 else if (!char.IsControl(keyInfo.KeyChar))
                 {
-                    content += keyInfo.KeyChar;
+                    content = content.Insert(cursorPos, keyInfo.KeyChar.ToString());
+                    cursorPos++;
+                    Console.ForegroundColor = ConsoleColor.White;
                     Console.Write(keyInfo.KeyChar);
+                    UpdateCursorDisplay(content, cursorPos, editStartLine);
                 }
             }
+            
             // Show decision menu
             bool save = ShowDecisionMenu("\nSave changes?\n", "Save", "Cancel");
 
@@ -407,9 +579,82 @@ class TotePadApp
             Console.ReadKey(true);
         }
     }
-/// <summary>
-/// This feature allows users to delete whatever note they want.
-/// </summary>
+
+    void UpdateCursorDisplay(string content, int cursorPos, int editStartLine, bool isCreate = false)
+    {
+        Console.ForegroundColor = ConsoleColor.White;
+        
+        // Calculate where the cursor should be
+        int lineCount = 0;
+        int lastNewlinePos = 0;
+        
+        for (int i = 0; i < cursorPos; i++)
+        {
+            if (content[i] == '\n')
+            {
+                lineCount++;
+                lastNewlinePos = i + 1;
+            }
+        }
+        
+        int posInLine = cursorPos - lastNewlinePos;
+        int cursorLine = editStartLine + lineCount;
+        int cursorCol = posInLine;
+        
+        // Add offset for ">" prompt on first line
+        if (isCreate && lineCount == 0)
+        {
+            cursorCol += 2;
+        }
+        
+        Console.ForegroundColor = ConsoleColor.White;
+        Console.SetCursorPosition(cursorCol, cursorLine);
+        Console.ForegroundColor = ConsoleColor.White;
+    }
+
+    void RedrawContent(string content, int cursorPos, int editStartLine, bool isCreate = false)
+    {
+        Console.ForegroundColor = ConsoleColor.White;
+        
+        // Clear everything from edit start
+        for (int i = 0; i < Console.BufferHeight - editStartLine; i++)
+        {
+            Console.SetCursorPosition(0, editStartLine + i);
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.Write(new string(' ', Console.WindowWidth));
+        }
+        
+        // Redraw content
+        Console.SetCursorPosition(0, editStartLine);
+        Console.ForegroundColor = ConsoleColor.White;
+        
+        if (isCreate)
+        {
+            Console.Write("> ");
+        }
+        
+        for (int i = 0; i < content.Length; i++)
+        {
+            Console.ForegroundColor = ConsoleColor.White;
+            if (content[i] == '\n')
+            {
+                Console.WriteLine();
+                if (isCreate) Console.Write("> ");
+            }
+            else
+            {
+                Console.Write(content[i]);
+            }
+        }
+        
+        Console.ForegroundColor = ConsoleColor.White;
+        
+        // Update cursor position
+        UpdateCursorDisplay(content, cursorPos, editStartLine, isCreate);
+    }
+    /// <summary>
+    /// This feature allows users to delete whatever note they want.
+    /// </summary>
     void DeleteNote()
     {
         if (notes.Count == 0)
@@ -477,6 +722,8 @@ class TotePadApp
         Console.ReadKey(true);
     }
 
+    // dito casuco ayusin mo nag ka letche letche ka stress, ako na modify tas delete hehe
+    
     static void Main()
     {
         TotePadApp app = new TotePadApp();
