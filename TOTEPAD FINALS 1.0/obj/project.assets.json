@@ -13,9 +13,9 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\Administrator\\OneDrive\\TOTEPAD\\TOTEPAD FINALS\\TOTEPAD FINALS 1.0\\TOTEPAD FINALS 1.0.csproj",
-      "projectName": "TOTEPAD FINALS 1.0",
-      "projectPath": "C:\\Users\\Administrator\\OneDrive\\TOTEPAD\\TOTEPAD FINALS\\TOTEPAD FINALS 1.0\\TOTEPAD FINALS 1.0.csproj",
+      "projectUniqueName": "C:\\Users\\Administrator\\OneDrive\\TOTEPAD\\TOTEPAD FINALS\\TOTEPAD FINALS 1.0\\TOTEPAD FINALE.csproj",
+      "projectName": "TOTEPAD FINALE",
+      "projectPath": "C:\\Users\\Administrator\\OneDrive\\TOTEPAD\\TOTEPAD FINALS\\TOTEPAD FINALS 1.0\\TOTEPAD FINALE.csproj",
       "packagesPath": "C:\\Users\\Administrator\\.nuget\\packages\\",
       "outputPath": "C:\\Users\\Administrator\\OneDrive\\TOTEPAD\\TOTEPAD FINALS\\TOTEPAD FINALS 1.0\\obj\\",
       "projectStyle": "PackageReference",
