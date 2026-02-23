@@ -35,6 +35,10 @@ public class NoteService
             Console.WriteLine($"Critical Error: Could not create directory. {ex.Message}");
         }
     }
+class TotePadApp
+{
+    readonly string notesFolder = "Notes";
+    readonly List<Note> notes = new List<Note>();
 
     public List<Note> LoadAllNotes()
     {
@@ -431,4 +435,14 @@ class TotePad
     }
 
     static void Main() => new TotePad().Run();
+}
+    // dito casuco ayusin mo nag ka letche letche ka stress, ako na modify tas delete hehe
+    
+    static void Main()
+    {
+        TotePadApp app = new TotePadApp();
+        app.StartupSequence();
+        app.LoadNotes();
+        app.ShowMainMenu();
+    }
 }
