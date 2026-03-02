@@ -428,12 +428,24 @@ class TotePad
         }
     }
 
-    void ShowCalendar()
+    void CalendarMenu()
     {
-        MenuRenderer.DrawHeader("CALENDAR");
-        MenuRenderer.InstructionHeader(" Press any key to return.");
-        Console.WriteLine("UNDER CONSTRUVTION :PPPPPP)");
-        Console.ReadKey(true);
+        while (true)
+        {
+            MenuRenderer.DrawHeader("CALENDAR VIEW");
+            if (!_events.Any()) Console.WriteLine("(No events found)\n");
+            else _events.ForEach(e => Console.WriteLine($"- {e.Title} on {e.Date:MMM dd, yyyy}"));
+
+            Console.WriteLine("\n--- Actions ---");
+            int action = MenuRenderer.ShowArrowMenu(new[] { "Add Event", "View Event", "Modify Event", "Delete Event", "Back" });
+
+            if (action == 0) CreateEvent();
+            else if (action == 1) ViewEvent();
+            else if (action == 2) ModifyEvent();
+            else if (action == 3) DeleteEvent();
+            else break;
+        }
+    }
     }
 
     static void Main() => new TotePad().Run();

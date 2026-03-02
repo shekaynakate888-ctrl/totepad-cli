@@ -8,19 +8,19 @@
     "net9.0": []
   },
   "packageFolders": {
-    "C:\\Users\\Administrator\\.nuget\\packages\\": {}
+    "C:\\Users\\ACER\\.nuget\\packages\\": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\Administrator\\OneDrive\\TOTEPAD\\TOTEPAD FINALS\\TOTEPAD FINALS 1.0\\TOTEPAD FINALE.csproj",
-      "projectName": "TOTEPAD FINALE",
-      "projectPath": "C:\\Users\\Administrator\\OneDrive\\TOTEPAD\\TOTEPAD FINALS\\TOTEPAD FINALS 1.0\\TOTEPAD FINALE.csproj",
-      "packagesPath": "C:\\Users\\Administrator\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\Administrator\\OneDrive\\TOTEPAD\\TOTEPAD FINALS\\TOTEPAD FINALS 1.0\\obj\\",
+      "projectUniqueName": "C:\\Users\\ACER\\totepad\\totepad-cli\\TOTEPAD FINALS 1.0\\TOTEPAD FINALS 1.0.csproj",
+      "projectName": "TOTEPAD FINALS 1.0",
+      "projectPath": "C:\\Users\\ACER\\totepad\\totepad-cli\\TOTEPAD FINALS 1.0\\TOTEPAD FINALS 1.0.csproj",
+      "packagesPath": "C:\\Users\\ACER\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\ACER\\totepad\\totepad-cli\\TOTEPAD FINALS 1.0\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "C:\\Users\\Administrator\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        "C:\\Users\\ACER\\AppData\\Roaming\\NuGet\\NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net9.0"
