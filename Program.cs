@@ -1,9 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Diagnostics.Tracing;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices.Marshalling;
 using System.Text;
 using System.Threading;
+
 namespace Totepad;
 
 // 1. Models 
@@ -11,6 +16,7 @@ namespace Totepad;
 /// Ito ang pattern para sa mga notes natin. May Title ito para sa pangalan ng file at Content para sa mismong text. Ginawa ko itong 'record' para hindi basta-basta magulo ang data at madaling i-manage. Dito umiikot ang buong app para sa paggawa, pag-edit, at pag-delete ng notes kemkemekeme
 /// </summary>
 public record Note(string Title, string Content);
+public record Event(string Title, DateTime Date, string Time, string Description);
 
 public static class TotepadConstants
 {
@@ -49,9 +55,11 @@ public class NoteService
         {
             foreach (string file in Directory.GetFiles(TotepadConstants.NotesFolder, $"*{TotepadConstants.NoteExtension}"))
             {
+                string rawContent = File.ReadAllText(file);
+                string normalizedContent = rawContent.Replace("\r\n", "\n").Replace("\r", "\n");
                 notes.Add(new Note(
                     Path.GetFileNameWithoutExtension(file),
-                    File.ReadAllText(file)
+                    normalizedContent
                 ));
             }
         }
@@ -115,6 +123,73 @@ public static class MenuRenderer
         Console.WriteLine("==============================================\n");
     }
 
+    public static void DrawCalendarGrid(DateTime viewDate, List<Event> events)
+    {   
+        Console.ForegroundColor = TotepadConstants.HighlightColor;
+
+        DateTime firstDay = new DateTime(viewDate.Year, viewDate.Month, 1);
+        int daysInMonth = DateTime.DaysInMonth(viewDate.Year, viewDate.Month);
+        int dayOfWeek = (int)firstDay.DayOfWeek;
+
+        string divider = "=============================";
+        Console.WriteLine(divider);
+        Console.WriteLine($"=        {viewDate:MMMM yyyy}".PadRight(27) + " =");
+        Console.WriteLine(divider);
+        Console.WriteLine("= S = M = T = W = T = F = S =");
+        Console.WriteLine(divider);
+
+        int currentColumn = 0;
+        Console.Write("="); // Start first row border
+
+        // 1. Draw leading empty slots
+        for (int i = 0; i < dayOfWeek; i++)
+        {
+            Console.Write("   ="); 
+            currentColumn++;
+        }
+
+        // 2. Draw the actual days
+        for (int day = 1; day <= daysInMonth; day++)
+        {
+            DateTime dateToCheck = new DateTime(viewDate.Year, viewDate.Month, day);
+
+            // --- Highlight Logic ---
+            if (dateToCheck.Date == DateTime.Today)
+                Console.ForegroundColor = ConsoleColor.Cyan; // Today
+            else if (events.Any(e => e.Date.Date == dateToCheck.Date))
+                Console.ForegroundColor = ConsoleColor.Magenta; // Event Day
+            else
+                Console.ForegroundColor = TotepadConstants.HighlightColor;
+
+            Console.Write($" {day,2}");
+
+            
+            Console.ForegroundColor = TotepadConstants.HighlightColor;
+            Console.Write("=");
+
+            currentColumn++;
+
+            // 3. Row Wrapping Logic
+            if (currentColumn % 7 == 0 && day < daysInMonth)
+            {
+                Console.WriteLine();
+                Console.Write("="); // Start the next row's border
+            }
+        }
+
+
+        // 4. Fill trailing empty slots to close the box
+        while (currentColumn % 7 != 0)
+        {
+            Console.Write("   =");
+            currentColumn++;
+        }
+    
+
+        Console.WriteLine("\n" + divider);
+        Console.WriteLine("=     CREATE A SCHEDULE     =");
+        Console.WriteLine(divider);
+    }
     public static void InstructionHeader(string message)
     {
         Console.ForegroundColor = ConsoleColor.Yellow;
@@ -173,6 +248,7 @@ public static class MenuRenderer
             if (key == ConsoleKey.UpArrow) selected = (selected - 1 + options.Length) % options.Length;
             else if (key == ConsoleKey.DownArrow) selected = (selected + 1) % options.Length;
             else if (key == ConsoleKey.Enter) return selected;
+            else if (key == ConsoleKey.Escape) return -1;
         }
     }
 
@@ -239,11 +315,15 @@ public class NoteEditor
         while (true)
         {
             ConsoleKeyInfo keyInfo = Console.ReadKey(true);
-
             if (keyInfo.Key == ConsoleKey.Tab) break;
-
+            if (keyInfo.Key == ConsoleKey.Escape) return null;
+            
             if (keyInfo.Key == ConsoleKey.LeftArrow) cursorPos = Math.Max(0, cursorPos - 1);
             else if (keyInfo.Key == ConsoleKey.RightArrow) cursorPos = Math.Min(sb.Length, cursorPos + 1);
+            
+            else if (keyInfo.Key == ConsoleKey.UpArrow) cursorPos = MoveVertical(sb.ToString(), cursorPos, -1);
+            else if (keyInfo.Key == ConsoleKey.DownArrow) cursorPos = MoveVertical(sb.ToString(), cursorPos, 1);
+
             else if (keyInfo.Key == ConsoleKey.Backspace && cursorPos > 0)
             {
                 sb.Remove(cursorPos - 1, 1);
@@ -274,34 +354,101 @@ public class NoteEditor
         return sb.ToString();
     }
 
+    private int MoveVertical(string text, int currentPos, int direction)
+    {
+        string[] lines = text.Split('\n');
+        int currentLineIndex = 0;
+        int currentColumn = 0;
+        int tempPos = 0;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (currentPos <= tempPos + lines[i].Length)
+            {
+                currentLineIndex = i;
+                currentColumn = currentPos - tempPos;
+                break;
+            }
+            tempPos += lines[i].Length + 1; 
+        }
+
+        int targetLineIndex = currentLineIndex + direction;
+
+        if (targetLineIndex < 0 || targetLineIndex >= lines.Length) 
+            return currentPos;
+
+        int newPos = 0;
+        for (int i = 0; i < targetLineIndex; i++)
+        {
+            newPos += lines[i].Length + 1;
+        }
+
+        newPos += Math.Min(currentColumn, lines[targetLineIndex].Length);
+        
+        return newPos;
+    }
+
     private void Render(StringBuilder sb, int cursorPos, int startLine, bool isCreate)
     {
+        // Move back to where the typing area starts
         Console.SetCursorPosition(0, startLine);
-        // Clear area
-        for (int i = 0; i < 15; i++) Console.WriteLine(new string(' ', Console.WindowWidth));
+    
+        // Clear a large enough area so old text doesn't "ghost"
+        for (int i = 0; i < 30; i++)
+        {
+            Console.Write(new string(' ', Console.WindowWidth));
+        }
+    
         Console.SetCursorPosition(0, startLine);
-
         Console.ForegroundColor = ConsoleColor.White;
-        string prompt = isCreate ? "> " : "";
+
         string content = sb.ToString();
-        
-        if (isCreate) Console.Write(prompt);
-        Console.Write(content.Replace("\n", "\n" + prompt));
-        
+
+        // If creating, we ensure every NEW line starts with the prompt
+        if (isCreate)
+        {
+            // This splits the text and re-adds the prompt to every visual line
+            Console.Write("> " + content.Replace("\n", "\n> "));
+        }
+        else
+        {
+            Console.Write(content);
+        }   
+    
         UpdateCursor(sb, cursorPos, startLine, isCreate);
     }
-
     private void UpdateCursor(StringBuilder sb, int cursorPos, int startLine, bool isCreate)
     {
-        string currentText = sb.ToString().Substring(0, cursorPos);
-        int lines = currentText.Count(c => c == '\n');
-        int lastNewLine = currentText.LastIndexOf('\n');
-        int col = (cursorPos - (lastNewLine + 1)) + (isCreate ? 2 : 0);
-        
-        Console.SetCursorPosition(col, startLine + lines);
-    }
-}
+        int width = Console.WindowWidth;
+        int currentX = isCreate ? 2 : 0; 
+        int currentY = startLine;
 
+        string textToCursor = sb.ToString().Substring(0, cursorPos);
+
+        foreach (char c in textToCursor)
+        {
+            if (c == '\n')
+            {
+                currentX = isCreate ? 2 : 0;
+                currentY++;
+            }
+            else
+            {
+                currentX++;
+                if (currentX >= width)
+                {
+                    currentX = 0; 
+                    currentY++;
+                }         
+            }
+        }
+        int safeX = Math.Clamp(currentX, 0, width - 1);
+        int safeY = Math.Clamp(currentY, 0, Console.BufferHeight - 1);
+
+        Console.SetCursorPosition(safeX, safeY);
+    }
+    
+}
 // 5. Main Application
 /// <summary>
 /// Ito ang pinaka-utak ng app na nagpapatakbo sa lahat. Siya ang may hawak ng mga menu at calendar, at siya rin ang nag-uutos sa NoteService at NoteEditor para gumana sila. Hindi titigil ang app hangga’t hindi ka nag-e-exit, kaya pwede kang gumawa, tumingin, mag-ayos, o magbura ng notes kahit kailan mo gusto
@@ -312,11 +459,15 @@ class TotePad
     private NoteService _service = new();
     private List<Note> _notes = new();
     private NoteEditor _editor = new();
+    private List<Event> _events = new List<Event>();
 
     public void Run()
     {
         _service.EnsureDirectoryExists();
         _notes = _service.LoadAllNotes();
+        string eventsFolder = "Events";
+        List<Event> events = new List<Event>();
+        DateTime currentDate = DateTime.Now;
         
         while (true)
         {
@@ -324,7 +475,7 @@ class TotePad
             int choice = MenuRenderer.ShowArrowMenu(new[] { "Notes", "Calendar", "Exit" });
 
             if (choice == 0) NotesMenu();
-            else if (choice == 1) ShowCalendar();
+            else if (choice == 1) CalendarMenu();
             else break;
         }
     }
@@ -341,8 +492,9 @@ class TotePad
             else _notes.ForEach(n => Console.WriteLine($"- {n.Title}"));
 
             Console.WriteLine("\n--- Actions ---");
+            MenuRenderer.InstructionHeader("Use arrow keys to navigate, Enter to select, or Esc to go back.");
             int action = MenuRenderer.ShowArrowMenu(new[] { "Create", "View", "Modify", "Delete", "Back" });
-
+            if (action == -1 || action == 4) break;
             if (action == 0) CreateNote();
             else if (action == 1) ViewNote();
             else if (action == 2) ModifyNote();
@@ -355,26 +507,47 @@ class TotePad
     /// </summary>
     void CreateNote()
     {
-        MenuRenderer.DrawHeader("CREATE NEW NOTE");
-        MenuRenderer.InstructionHeader("Type your note content. Press TAB when done");
-        Console.CursorVisible = true;
-        Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.Write("Title: ");
-        string title = Console.ReadLine()?.Trim() ?? "";
-        Console.ForegroundColor = ConsoleColor.White;
-        
-        if (string.IsNullOrEmpty(title) || _notes.Any(n => n.Title.Equals(title, StringComparison.OrdinalIgnoreCase)))
-        {
-            MenuRenderer.ShowErrorMessage("Title empty or already exists!");
-            return;
-        }
+        MenuRenderer.DrawHeader("CREATE NEW NOTE"); 
+        MenuRenderer.InstructionHeader("Enter Title or press ESC to cancel.");
+    
+        Console.CursorVisible = true; 
+        Console.ForegroundColor = ConsoleColor.Cyan; 
+        Console.Write("Title: "); 
 
-        string content = _editor.EditContent("", true);
-        if (MenuRenderer.ShowDecisionMenu("Save this note?", "Cancel", "Save"))
+        string title = "";
+        while (true)
         {
-            var newNote = new Note(title, content);
-            if (_service.SaveNote(newNote)) _notes.Add(newNote);
+            var keyInfo = Console.ReadKey(true);
+            if (keyInfo.Key == ConsoleKey.Escape) return; // Immediate exit to menu
+            if (keyInfo.Key == ConsoleKey.Enter && !string.IsNullOrEmpty(title)) break;
+            if (keyInfo.Key == ConsoleKey.Backspace && title.Length > 0)
+            {
+                title = title.Remove(title.Length - 1);
+                Console.Write("\b \b");
+            }
+            else if (!char.IsControl(keyInfo.KeyChar))
+            {
+                title += keyInfo.KeyChar;
+                Console.Write(keyInfo.KeyChar);
+            }   
         }
+        title = title.Trim(); 
+
+        if (_notes.Any(n => n.Title.Equals(title, StringComparison.OrdinalIgnoreCase))) 
+        {
+            MenuRenderer.ShowErrorMessage("Title already exists!"); 
+            return; 
+        }   
+
+        string? content = _editor.EditContent("", true); 
+        if (content == null) return; 
+
+        if (MenuRenderer.ShowDecisionMenu("Save this note?", "Discard", "Save")) 
+        {
+            var newNote = new Note(title, content); 
+            if (_service.SaveNote(newNote)) _notes.Add(newNote); 
+        }   
+    
     }
 
     /// <summary>
@@ -384,9 +557,9 @@ class TotePad
     {
         if (!_notes.Any()) return;
         MenuRenderer.DrawHeader("VIEW NOTE");
-        MenuRenderer.InstructionHeader("Use arrow keys to select a note. Press Enter to view");    
+        MenuRenderer.InstructionHeader("Use arrow keys to select a note. Press Enter to view, or Esc to cancel");    
         int index = MenuRenderer.ShowArrowMenu(_notes.Select(n => n.Title).ToArray());
-        
+        if (index == -1) return;
         MenuRenderer.DrawHeader(_notes[index].Title);
         Console.WriteLine(_notes[index].Content);
         Console.WriteLine("\n\n(Press any key to return)");
@@ -400,11 +573,14 @@ class TotePad
     {
         if (!_notes.Any()) return;
         MenuRenderer.DrawHeader("SELECT NOTE TO MODIFY");
-        MenuRenderer.InstructionHeader("Use arrow keys to select a note. Press Enter to edit");
+        MenuRenderer.InstructionHeader("Use arrow keys to select a note. Press Enter to edit, or Esc to cancel");
         int index = MenuRenderer.ShowArrowMenu(_notes.Select(n => n.Title).ToArray());
+        if (index == -1) return;
 
-        string newContent = _editor.EditContent(_notes[index].Content, false);
-        if (MenuRenderer.ShowDecisionMenu("Save changes?", "Cancel", "Save"))
+        string? newContent = _editor.EditContent(_notes[index].Content, false);
+        if (newContent == null) return;
+        
+        if (MenuRenderer.ShowDecisionMenu("Save changes?", "Don't Save", "Save"))
         {
             _notes[index] = _notes[index] with { Content = newContent };
             _service.SaveNote(_notes[index]);
@@ -418,16 +594,17 @@ class TotePad
     {
         if (!_notes.Any()) return;
         MenuRenderer.DrawHeader("SELECT NOTE TO DELETE");
-        MenuRenderer.InstructionHeader("Use arrow keys to select a note. Press Enter to delete");
+        MenuRenderer.InstructionHeader("Use arrow keys to select a note. Press Enter to delete, or Esc to cancel");
         int index = MenuRenderer.ShowArrowMenu(_notes.Select(n => n.Title).ToArray());
-
-        if (MenuRenderer.ShowDecisionMenu($"Delete '{_notes[index].Title}'?", "Cancel", "Delete"))
+         if (index == -1) return;
+        if (MenuRenderer.ShowDecisionMenu("Save changes?", "Don't Save", "Save"))
         {
             _service.DeleteNote(_notes[index].Title);
             _notes.RemoveAt(index);
         }
     }
 
+/// Calendar part
     void CalendarMenu()
     {
         while (true)
@@ -437,16 +614,42 @@ class TotePad
             else _events.ForEach(e => Console.WriteLine($"- {e.Title} on {e.Date:MMM dd, yyyy}"));
 
             Console.WriteLine("\n--- Actions ---");
-            int action = MenuRenderer.ShowArrowMenu(new[] { "Add Event", "View Event", "Modify Event", "Delete Event", "Back" });
+            MenuRenderer.InstructionHeader("Use arrow keys to navigate, Enter to select, or Esc to go back.");
+            int action = MenuRenderer.ShowArrowMenu(new[] { "View Calendar", "Create Event", "View Event", "Modify Event", "Delete Event", "Back" });
 
-            if (action == 0) CreateEvent();
-            else if (action == 1) ViewEvent();
-            else if (action == 2) ModifyEvent();
-            else if (action == 3) DeleteEvent();
+            if (action == 0) ShowCalendar();
+            else if (action == 1) CreateEvent();
+            else if (action == 2) ViewEvent();
+            else if (action == 3) ModifyEvent();
+            else if (action == 4) DeleteEvent();
             else break;
         }
     }
-    }
 
+    void ShowCalendar()
+    {
+       //events = _service.LoadAllEvents();
+        DateTime viewDate = DateTime.Now;
+
+        while (true)
+        {
+            Console.Clear();
+            // Pass both the date we are looking at AND the list of events
+            MenuRenderer.DrawCalendarGrid(viewDate, _events);
+
+            Console.ForegroundColor = ConsoleColor.Gray;
+            Console.WriteLine("\n[←/→] Prev/Next Month | [Enter] Schedule | [Esc] Back");
+
+            var key = Console.ReadKey(true).Key;
+            if (key == ConsoleKey.RightArrow) viewDate = viewDate.AddMonths(1);
+            else if (key == ConsoleKey.LeftArrow) viewDate = viewDate.AddMonths(-1);
+            else if (key == ConsoleKey.Enter) CalendarMenu();
+            else if (key == ConsoleKey.Escape) break;
+        }
+    }    
+    void CreateEvent() { Console.WriteLine("Add Event logic coming soon..."); Console.ReadKey(); }
+    void ViewEvent() { Console.WriteLine("View logic coming soon..."); Console.ReadKey(); }
+    void ModifyEvent() { Console.WriteLine("Modify logic coming soon..."); Console.ReadKey(); }
+    void DeleteEvent() { Console.WriteLine("Delete logic coming soon..."); Console.ReadKey(); }
     static void Main() => new TotePad().Run();
 }
