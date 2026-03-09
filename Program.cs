@@ -21,13 +21,14 @@ public record Event(string Title, DateTime Date, string Time, string Description
 public static class TotepadConstants
 {
     public const string NotesFolder = "Notes";
+    public const string eventsFolder = "Events";
     public const string NoteExtension = ".txt";
+    public const string eventsFile = "events.txt";
+
     public const ConsoleColor PrimaryColor = ConsoleColor.Yellow;
     public const ConsoleColor HighlightColor = ConsoleColor.Green;
     public const ConsoleColor ErrorColor = ConsoleColor.Red;
 }
-
-
 
 // 2. Note Services 
 /// <summary>
@@ -70,6 +71,32 @@ public class NoteService
         return notes;
     }
 
+    public List<Event> LoadAllEvents()
+    {
+        var events = new List<Event>();
+        string filePath = Path.Combine(TotepadConstants.eventsFolder, TotepadConstants.eventsFile);
+
+        try
+        {
+            if (File.Exists(filePath))
+            {
+                foreach (string line in File.ReadAllLines(filePath))
+                {
+                    if (string.IsNullOrWhiteSpace(line)) continue;
+                    var parts = line.Split('|');
+                    if (parts.Length == 4 && DateTime.TryParse(parts[0], out DateTime parsedDate))
+                    {
+                        events.Add(new Event(parts[2], DateTime.Parse(parts[0]), parts[1], parts[3]));
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MenuRenderer.ShowErrorMessage($"Could not load events: {ex.Message}");
+        }
+        return events;
+    }
 
     public bool SaveNote(Note note)
     {
@@ -84,6 +111,32 @@ public class NoteService
         {
             MenuRenderer.ShowErrorMessage($"Failed to save: {ex.Message}");
             return false;
+        }
+    }
+
+    public void SaveEvents(List<Event> events)
+    {
+        // Use the constants we just defined
+        string folder = TotepadConstants.eventsFolder;
+        string filePath = Path.Combine(folder, TotepadConstants.eventsFile);
+
+        try
+        {
+            if (!Directory.Exists(folder))
+            {
+                Directory.CreateDirectory(folder);
+            }
+
+            var eventLines = events.Select(e => $"{e.Date:yyyy-MM-dd}|{e.Time}|{e.Title}|{e.Description}");
+            File.WriteAllLines(filePath, eventLines);
+        }
+        catch (IOException ex)
+        {
+            MenuRenderer.ShowErrorMessage($"File Error: Could not save events. {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            MenuRenderer.ShowErrorMessage($"An unexpected error occurred: {ex.Message}");
         }
     }
 
@@ -125,74 +178,65 @@ public static class MenuRenderer
 
     public static void DrawCalendarGrid(DateTime viewDate, List<Event> events)
     {   
+        // Set the highlight color for the calendar grid
         Console.ForegroundColor = TotepadConstants.HighlightColor;
-
         DateTime firstDay = new DateTime(viewDate.Year, viewDate.Month, 1);
         int daysInMonth = DateTime.DaysInMonth(viewDate.Year, viewDate.Month);
         int dayOfWeek = (int)firstDay.DayOfWeek;
-
-        string divider = "=============================";
+        // Calendar header
+        string divider = "==========================================="; 
         Console.WriteLine(divider);
-        Console.WriteLine($"=        {viewDate:MMMM yyyy}".PadRight(27) + " =");
+        
+        string monthYear = viewDate.ToString("MMMM yyyy");
+        int monthPadding = (42 - monthYear.Length - 2) / 2;
+        Console.WriteLine("=" + new string(' ', monthPadding) + monthYear + new string(' ', 42 - monthYear.Length - monthPadding - 2) + "=");
+        // Days of week header
         Console.WriteLine(divider);
-        Console.WriteLine("= S = M = T = W = T = F = S =");
+        Console.WriteLine("=  S  =  M  =  T  =  W  =  T  =  F  =  S  =");
         Console.WriteLine(divider);
-
+        // We start with the first day of the month, so we need to add empty spaces for the days before it
         int currentColumn = 0;
-        Console.Write("="); // Start first row border
-
-        // 1. Draw leading empty slots
+        Console.Write("=");
+        // Add empty spaces for days before the first day of the month
         for (int i = 0; i < dayOfWeek; i++)
         {
-            Console.Write("   ="); 
+            Console.Write("     ="); 
             currentColumn++;
         }
-
-        // 2. Draw the actual days
+        // Now we print the days of the month, and we check if any of them should be highlighted (current day or event day)
         for (int day = 1; day <= daysInMonth; day++)
         {
+            // highlight event logic starts here
             DateTime dateToCheck = new DateTime(viewDate.Year, viewDate.Month, day);
-
-            // --- Highlight Logic ---
             if (dateToCheck.Date == DateTime.Today)
-                Console.ForegroundColor = ConsoleColor.Cyan; // Today
-            else if (events.Any(e => e.Date.Date == dateToCheck.Date))
-                Console.ForegroundColor = ConsoleColor.Magenta; // Event Day
+                Console.ForegroundColor = ConsoleColor.Cyan; // Highlight current day in cyan
+            else if (events.Any(e => e.Date.Date == dateToCheck.Date)) // Highlight days with events in magenta
+                Console.ForegroundColor = ConsoleColor.Magenta;
             else
                 Console.ForegroundColor = TotepadConstants.HighlightColor;
 
-            Console.Write($" {day,2}");
-
-            
+            Console.Write($"  {day,2} ");
             Console.ForegroundColor = TotepadConstants.HighlightColor;
             Console.Write("=");
-
             currentColumn++;
-
-            // 3. Row Wrapping Logic
+            // After printing each day, check if we need to move to the next line
             if (currentColumn % 7 == 0 && day < daysInMonth)
             {
                 Console.WriteLine();
-                Console.Write("="); // Start the next row's border
+                Console.Write("=");
             }
         }
-
-
-        // 4. Fill trailing empty slots to close the box
+        // Fill the remaining cells in the last week with empty spaces
         while (currentColumn % 7 != 0)
         {
-            Console.Write("   =");
+            Console.Write("     =");
             currentColumn++;
         }
-    
-
         Console.WriteLine("\n" + divider);
-        Console.WriteLine("=     CREATE A SCHEDULE     =");
-        Console.WriteLine(divider);
     }
     public static void InstructionHeader(string message)
     {
-        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.ForegroundColor = ConsoleColor.DarkCyan;
 
         int boxWidth = 26; 
         int leftPadding = Math.Max(0, (boxWidth - message.Length) / 2);
@@ -465,9 +509,7 @@ class TotePad
     {
         _service.EnsureDirectoryExists();
         _notes = _service.LoadAllNotes();
-        string eventsFolder = "Events";
-        List<Event> events = new List<Event>();
-        DateTime currentDate = DateTime.Now;
+       
         
         while (true)
         {
@@ -596,7 +638,7 @@ class TotePad
         MenuRenderer.DrawHeader("SELECT NOTE TO DELETE");
         MenuRenderer.InstructionHeader("Use arrow keys to select a note. Press Enter to delete, or Esc to cancel");
         int index = MenuRenderer.ShowArrowMenu(_notes.Select(n => n.Title).ToArray());
-         if (index == -1) return;
+        if (index == -1) return;
         if (MenuRenderer.ShowDecisionMenu("Save changes?", "Don't Save", "Save"))
         {
             _service.DeleteNote(_notes[index].Title);
@@ -607,49 +649,120 @@ class TotePad
 /// Calendar part
     void CalendarMenu()
     {
-        while (true)
-        {
-            MenuRenderer.DrawHeader("CALENDAR VIEW");
-            if (!_events.Any()) Console.WriteLine("(No events found)\n");
-            else _events.ForEach(e => Console.WriteLine($"- {e.Title} on {e.Date:MMM dd, yyyy}"));
-
-            Console.WriteLine("\n--- Actions ---");
-            MenuRenderer.InstructionHeader("Use arrow keys to navigate, Enter to select, or Esc to go back.");
-            int action = MenuRenderer.ShowArrowMenu(new[] { "View Calendar", "Create Event", "View Event", "Modify Event", "Delete Event", "Back" });
-
-            if (action == 0) ShowCalendar();
-            else if (action == 1) CreateEvent();
-            else if (action == 2) ViewEvent();
-            else if (action == 3) ModifyEvent();
-            else if (action == 4) DeleteEvent();
-            else break;
-        }
-    }
-
-    void ShowCalendar()
-    {
-       //events = _service.LoadAllEvents();
         DateTime viewDate = DateTime.Now;
-
         while (true)
         {
-            Console.Clear();
-            // Pass both the date we are looking at AND the list of events
+            _events = _service.LoadAllEvents();
+            MenuRenderer.DrawHeader("CALENDAR & EVENTS");
+            MenuRenderer.InstructionHeader("Cyan for current day, Magenta for days with events");
             MenuRenderer.DrawCalendarGrid(viewDate, _events);
+            Console.WriteLine($"\n--- Events for {viewDate:MMMM yyyy} ---");
+            var monthEvents = _events.Where(e => e.Date.Month == viewDate.Month && e.Date.Year == viewDate.Year).ToList();
 
-            Console.ForegroundColor = ConsoleColor.Gray;
-            Console.WriteLine("\n[←/→] Prev/Next Month | [Enter] Schedule | [Esc] Back");
+            if (!monthEvents.Any()) Console.WriteLine(" (No events scheduled) ");
+            else monthEvents.ForEach(e => Console.WriteLine($" • {e.Date:dd}: {e.Title} ({e.Time})"));
 
+            MenuRenderer.InstructionHeader(" [←]|[→] Change Month | [Enter] Select Action | [Esc] Back");
             var key = Console.ReadKey(true).Key;
             if (key == ConsoleKey.RightArrow) viewDate = viewDate.AddMonths(1);
             else if (key == ConsoleKey.LeftArrow) viewDate = viewDate.AddMonths(-1);
-            else if (key == ConsoleKey.Enter) CalendarMenu();
             else if (key == ConsoleKey.Escape) break;
+            else if (key == ConsoleKey.Enter)
+            {
+                int action = MenuRenderer.ShowArrowMenu(new[] { "Create Event", "View event", "Modify Event", "Delete Event", "Cancel" });
+                if (action == 0) CreateEvent();
+                else if (action == 1) ViewEvent();
+                else if (action == 2) ModifyEvent();
+                else if (action == 3) DeleteEvent();
+            }
         }
-    }    
-    void CreateEvent() { Console.WriteLine("Add Event logic coming soon..."); Console.ReadKey(); }
+    }
+   
+    void CreateEvent()
+    {
+        Console.Clear();
+        MenuRenderer.DrawHeader("SCHEDULE NEW EVENT");
+        MenuRenderer.InstructionHeader("Fill in the details. Press ESC at any time to cancel.");
+
+        // Professional 'Early Return' pattern
+        if (!TryGetInput(" Event Title: ", out string title)) return;
+        if (string.IsNullOrWhiteSpace(title)) title = "New Event";
+
+        if (!TryGetInput(" Date (YYYY-MM-DD): ", out string dateInput)) return;
+        DateTime eventDate = DateTime.TryParse(dateInput, out var d) ? d : DateTime.Today;
+
+        if (!TryGetInput(" Time (HH:mm): ", out string time)) return;
+        if (string.IsNullOrWhiteSpace(time)) time = "09:00";
+
+        // Use your existing editor for the long description
+        Console.WriteLine("\n Description (TAB to save, ESC to cancel):");
+        NoteEditor editor = new NoteEditor();
+        string? description = editor.EditContent("", true);
+        if (description == null) return;
+
+        // Create and Save
+        Event newEvent = new Event(title, eventDate, time, description);
+        _events.Add(newEvent);
+        _service.SaveEvents(_events);
+
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("\n [ Event Saved! ]");
+        Thread.Sleep(800);
+    }
     void ViewEvent() { Console.WriteLine("View logic coming soon..."); Console.ReadKey(); }
     void ModifyEvent() { Console.WriteLine("Modify logic coming soon..."); Console.ReadKey(); }
-    void DeleteEvent() { Console.WriteLine("Delete logic coming soon..."); Console.ReadKey(); }
+    void DeleteEvent()
+    {
+        if (!_events.Any())
+        {
+            MenuRenderer.ShowErrorMessage("No events to delete!");
+            return;
+        }
+        MenuRenderer.DrawHeader("SELECT EVENT TO DELETE");
+        MenuRenderer.InstructionHeader("Use arrow keys to select an event. Press Enter to delete, or Esc to cancel");
+        int index = MenuRenderer.ShowArrowMenu(_events.Select(e => $"{e.Title} ({e.Date:MMM dd, yyyy})").ToArray());
+        if (index == -1) return;
+        if (MenuRenderer.ShowDecisionMenu($"Delete '{_events[index].Title}'?", "Cancel", "Delete"))
+        {
+            _events.RemoveAt(index);
+            _service.SaveEvents(_events);
+
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine("\n [ Event has been removed ]");
+            Thread.Sleep(800);
+        }
+    }
+    // Helper method to for cancelling (ESC) purpose (as well as title forground color) sepcifically for CreateEvent since it is not in loop,
+    private bool TryGetInput(string prompt, out string result)
+    {
+        Console.CursorVisible = true;
+        Console.ResetColor();
+        Console.Write(prompt);
+        //cyan color for creating event title
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        result = "";
+        while (true)
+        {
+            var keyInfo = Console.ReadKey(true);
+            if (keyInfo.Key == ConsoleKey.Escape) return false; 
+            if (keyInfo.Key == ConsoleKey.Enter) { Console.WriteLine(); return true; }
+
+            if (keyInfo.Key == ConsoleKey.Backspace && result.Length > 0)
+            {
+                result = result.Remove(result.Length - 1);
+                Console.Write("\b \b");
+            }
+            else if (!char.IsControl(keyInfo.KeyChar))
+            {
+                // Prevent '|' character to avoid issues with event saving format
+                if (keyInfo.KeyChar != '|')
+                {
+                    result += keyInfo.KeyChar;
+                    Console.Write(keyInfo.KeyChar);
+                }
+               
+            }
+        }
+    }
     static void Main() => new TotePad().Run();
 }
