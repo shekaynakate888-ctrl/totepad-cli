@@ -13,7 +13,7 @@ namespace Totepad;
 
 // 1. Models 
 /// <summary>
-/// Ito ang pattern para sa mga notes natin. May Title ito para sa pangalan ng file at Content para sa mismong text. Ginawa ko itong 'record' para hindi basta-basta magulo ang data at madaling i-manage. Dito umiikot ang buong app para sa paggawa, pag-edit, at pag-delete ng notes kemkemekeme
+/// these are the basic data structures for our notes and events. A Note has a Title and Content, while an Event has a Title, Date, Time, and Description. Ginamit ko ang C# 9 record type para sa mga ito kasi simple lang sila at gusto ko yung built-in immutability at value-based equality na meron sila.
 /// </summary>
 public record Note(string Title, string Content);
 public record Event(string Title, DateTime Date, string Time, string Description);
@@ -32,8 +32,8 @@ public static class TotepadConstants
 
 // 2. Note Services 
 /// <summary>
-/// Ito ang taga-handle ng lahat ng file settings sa notes natin. Siya ang sumisigurado na may folder para sa notes, siya ang nagse-save, naglo-load, at nagbubura ng mga files. Nilagay ko lahat ng file logic dito para hindi magulo sa main program at may kasama na rin itong error handling para hindi basta-basta mag-crash ang app kung may problema sa folder.
-/// </summary>
+/// this is where all the file handling happens.such as creating the notes directory, loading and saving notes, and also loading and saving events. 
+ /// </summary> 
 public class NoteService
 {
     public void EnsureDirectoryExists()
@@ -156,8 +156,7 @@ public class NoteService
 
 // 3. UI 
 /// <summary>
-/// Dito ko nilagay lahat ng code para sa itsura ng app, gaya ng mga header, instruction boxes, at mga menu. Ginawa ko itong helper para isang lugar na lang ang babaguhin ko kung gusto kong palitan ang design at para hindi masyadong mahaba o magulo yung main code 
-/// </summary>
+/// this is responsible for all the visual stuff in the console. It has methods to draw the main menu, the calendar grid, and also some helper methods for showing error messages and decision prompts. 
 public static class MenuRenderer
 {
     public static void DrawHeader(string title)
@@ -342,7 +341,7 @@ public static class MenuRenderer
 
 // 4. Note Editor 
 /// <summary>
-/// Dito nangyayari yung pag-type at pag-edit ng notes. Pwede mo imove gamit ang arrow keys at gumamit ng backspace o delete para magbura. Lagi nitong pinapakita yung cursor mo habang nagsusulat ka, at kapag tapos ka na, pindutin lang ang TAB key para ma-save o lumabas
+/// this is a custom text editor that runs in the console. It allows users to type and edit multi-line content with basic navigation (arrow keys), editing (backspace, delete), and saving (tab key). It also handles rendering the text and keeping the cursor in the right position.
 /// </summary>
 
 public class NoteEditor
@@ -495,7 +494,7 @@ public class NoteEditor
 }
 // 5. Main Application
 /// <summary>
-/// Ito ang pinaka-utak ng app na nagpapatakbo sa lahat. Siya ang may hawak ng mga menu at calendar, at siya rin ang nag-uutos sa NoteService at NoteEditor para gumana sila. Hindi titigil ang app hangga’t hindi ka nag-e-exit, kaya pwede kang gumawa, tumingin, mag-ayos, o magbura ng notes kahit kailan mo gusto
+/// this is the main class that runs the application. It initializes the NoteService, loads existing notes and events, and manages the main loop for the user interface. It has methods for displaying the notes menu and calendar menu, as well as handling the logic for creating, viewing, modifying, and deleting notes and events.
 /// </summary>
 
 class TotePad
@@ -678,19 +677,20 @@ class TotePad
         }
     }
    
+    // This allows users to create new events by filling in the details like title, date, time, and description. 
     void CreateEvent()
     {
         Console.Clear();
         MenuRenderer.DrawHeader("SCHEDULE NEW EVENT");
         MenuRenderer.InstructionHeader("Fill in the details. Press ESC at any time to cancel.");
 
-        // Professional 'Early Return' pattern
+        // Get Event Details
         if (!TryGetInput(" Event Title: ", out string title)) return;
         if (string.IsNullOrWhiteSpace(title)) title = "New Event";
-
+        // Default date to today if parsing fails, but allow user to input in YYYY-MM-DD format
         if (!TryGetInput(" Date (YYYY-MM-DD): ", out string dateInput)) return;
         DateTime eventDate = DateTime.TryParse(dateInput, out var d) ? d : DateTime.Today;
-
+        // Default time to 09:00 if parsing fails, but allow user to input in HH:mm format
         if (!TryGetInput(" Time (HH:mm): ", out string time)) return;
         if (string.IsNullOrWhiteSpace(time)) time = "09:00";
 
@@ -729,6 +729,7 @@ class TotePad
         Console.WriteLine("\n\n(Press any key to return)");
         Console.ReadKey(true);
     }
+    // This allows users to modify existing events, changing any of the details as needed.
     void ModifyEvent()
     {
         if (!_events.Any())
@@ -740,17 +741,21 @@ class TotePad
         MenuRenderer.InstructionHeader("Use arrow keys to select an event. Press Enter to edit, or Esc to cancel");
         int index = MenuRenderer.ShowArrowMenu(_events.Select(e => $"{e.Title} ({e.Date:MMM dd, yyyy})").ToArray());
         if (index == -1) return;
-
         Event selectedEvent = _events[index];
+        // changes to title
         if (!TryGetInput($" Title ({selectedEvent.Title}): ", out string title)) return;
         if (string.IsNullOrWhiteSpace(title)) title = selectedEvent.Title;
+        // changes to date, default to original date if parsing fails
         if (!TryGetInput($" Date ({selectedEvent.Date:yyyy-MM-dd}): ", out string dateInput)) return;
         DateTime eventDate = DateTime.TryParse(dateInput, out var d) ? d : selectedEvent.Date;
+        // changes to time, default to original time if input is empty
         if (!TryGetInput($" Time ({selectedEvent.Time}): ", out string time)) return;
         if (string.IsNullOrWhiteSpace(time)) time = selectedEvent.Time;
+
         Console.WriteLine("\n Description (TAB to save, ESC to cancel):");
         NoteEditor editor = new NoteEditor();
         string? description = editor.EditContent(selectedEvent.Description ?? "", false);
+
         if (description == null) return;
         if (MenuRenderer.ShowDecisionMenu("Save changes?", "Don't Save", "Save"))
         {
@@ -758,6 +763,7 @@ class TotePad
             _service.SaveEvents(_events);
         }
     }
+    // This allows users to delete events they no longer need, with a confirmation step to prevent accidental deletions.
     void DeleteEvent()
     {
         if (!_events.Any())
