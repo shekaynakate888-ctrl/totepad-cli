@@ -709,13 +709,60 @@ class TotePad
         Console.WriteLine("\n [ Event Saved! ]");
         Thread.Sleep(800);
     }
-    void ViewEvent() { Console.WriteLine("View logic coming soon..."); Console.ReadKey(); }
-    void ModifyEvent() { Console.WriteLine("Modify logic coming soon..."); Console.ReadKey(); }
+    //This allows users to view details of existing events by selecting from the calendar.
+    void ViewEvent()
+    {
+        if (!_events.Any())
+        {
+            MenuRenderer.ShowErrorMessage("NO EVENTS!");
+            return;
+        }
+        MenuRenderer.DrawHeader("VIEW EVENTS");
+        MenuRenderer.InstructionHeader("Use arrow keys to select an event. Press Enter to view, or Esc to cancel");
+        int index = MenuRenderer.ShowArrowMenu(_events.Select(e => $"{e?.Title ?? "No Title"} ({e?.Date:MMM dd, yyyy})").ToArray());
+        if (index == -1 || _events[index] == null) return;
+        var selectedEvent = _events[index];
+        MenuRenderer.DrawHeader(selectedEvent.Title ?? "(No Title)");
+        Console.WriteLine($"Date: {selectedEvent.Date:yyyy-MM-dd}");
+        Console.WriteLine($"Time: {selectedEvent.Time ?? "(No Time)"}\n");
+        Console.WriteLine(selectedEvent.Description ?? "(No Description)");
+        Console.WriteLine("\n\n(Press any key to return)");
+        Console.ReadKey(true);
+    }
+    void ModifyEvent()
+    {
+        if (!_events.Any())
+        {
+            MenuRenderer.ShowErrorMessage("NO EVENTS TO MODIFY!");
+            return;
+        }
+        MenuRenderer.DrawHeader("SELECT EVENTS TO MODIFY");
+        MenuRenderer.InstructionHeader("Use arrow keys to select an event. Press Enter to edit, or Esc to cancel");
+        int index = MenuRenderer.ShowArrowMenu(_events.Select(e => $"{e.Title} ({e.Date:MMM dd, yyyy})").ToArray());
+        if (index == -1) return;
+
+        Event selectedEvent = _events[index];
+        if (!TryGetInput($" Title ({selectedEvent.Title}): ", out string title)) return;
+        if (string.IsNullOrWhiteSpace(title)) title = selectedEvent.Title;
+        if (!TryGetInput($" Date ({selectedEvent.Date:yyyy-MM-dd}): ", out string dateInput)) return;
+        DateTime eventDate = DateTime.TryParse(dateInput, out var d) ? d : selectedEvent.Date;
+        if (!TryGetInput($" Time ({selectedEvent.Time}): ", out string time)) return;
+        if (string.IsNullOrWhiteSpace(time)) time = selectedEvent.Time;
+        Console.WriteLine("\n Description (TAB to save, ESC to cancel):");
+        NoteEditor editor = new NoteEditor();
+        string? description = editor.EditContent(selectedEvent.Description ?? "", false);
+        if (description == null) return;
+        if (MenuRenderer.ShowDecisionMenu("Save changes?", "Don't Save", "Save"))
+        {
+            _events[index] = selectedEvent with { Title = title, Date = eventDate, Time = time, Description = description };
+            _service.SaveEvents(_events);
+        }
+    }
     void DeleteEvent()
     {
         if (!_events.Any())
         {
-            MenuRenderer.ShowErrorMessage("No events to delete!");
+            MenuRenderer.ShowErrorMessage("NO EVENTS TO DELETE!");
             return;
         }
         MenuRenderer.DrawHeader("SELECT EVENT TO DELETE");
