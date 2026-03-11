@@ -1,14 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Diagnostics.Tracing;
-using System.IO;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices.Marshalling;
 using System.Text;
-using System.Threading;
-
 namespace Totepad;
 
 // 1. Models 
@@ -33,7 +23,7 @@ public static class TotepadConstants
 // 2. Note Services 
 /// <summary>
 /// this is where all the file handling happens.such as creating the notes directory, loading and saving notes, and also loading and saving events. 
- /// </summary> 
+/// </summary> 
 public class NoteService
 {
     public void EnsureDirectoryExists()
@@ -86,7 +76,7 @@ public class NoteService
                     var parts = line.Split('|');
                     if (parts.Length == 4 && DateTime.TryParse(parts[0], out DateTime parsedDate))
                     {
-                        events.Add(new Event(parts[2], DateTime.Parse(parts[0]), parts[1], parts[3]));
+                        events.Add(new Event(parts[2], parsedDate, parts[1], parts[3]));
                     }
                 }
             }
@@ -116,7 +106,7 @@ public class NoteService
 
     public void SaveEvents(List<Event> events)
     {
-        // Use the constants we just defined
+        // Uses the constants we just defined
         string folder = TotepadConstants.eventsFolder;
         string filePath = Path.Combine(folder, TotepadConstants.eventsFile);
 
@@ -183,7 +173,7 @@ public static class MenuRenderer
         int daysInMonth = DateTime.DaysInMonth(viewDate.Year, viewDate.Month);
         int dayOfWeek = (int)firstDay.DayOfWeek;
         // Calendar header
-        string divider = "==========================================="; 
+        string divider = "============================================"; 
         Console.WriteLine(divider);
         
         string monthYear = viewDate.ToString("MMMM yyyy");
@@ -379,7 +369,7 @@ public class NoteEditor
                 Render(sb, cursorPos, editStartLine, isCreate);
             }
             else if (keyInfo.Key == ConsoleKey.Enter)
-            {
+            {   
                 sb.Insert(cursorPos, "\n");
                 cursorPos++;
                 Render(sb, cursorPos, editStartLine, isCreate);
@@ -566,11 +556,11 @@ class TotePad
                 title = title.Remove(title.Length - 1);
                 Console.Write("\b \b");
             }
-            else if (!char.IsControl(keyInfo.KeyChar))
+           else if (!char.IsControl(keyInfo.KeyChar) && keyInfo.KeyChar != '|') 
             {
                 title += keyInfo.KeyChar;
                 Console.Write(keyInfo.KeyChar);
-            }   
+            }
         }
         title = title.Trim(); 
 
