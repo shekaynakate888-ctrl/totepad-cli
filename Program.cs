@@ -336,6 +336,7 @@ public static class MenuRenderer
 
 public class NoteEditor
 {
+    // This is the main method of the NoteEditor. indicates whether we're creating a new note or editing an existing one. It enters a loop where it listens for key presses and updates the content and cursor position accordingly. The user can navigate with arrow keys, edit text with backspace and delete, and save by pressing the tab key. If the user presses escape, it returns null to indicate that editing was cancelled.
     public string EditContent(string initialContent, bool isCreate)
     {
         Console.CursorVisible = true;
@@ -370,15 +371,42 @@ public class NoteEditor
             }
             else if (keyInfo.Key == ConsoleKey.Enter)
             {   
-                sb.Insert(cursorPos, "\n");
-                cursorPos++;
-                Render(sb, cursorPos, editStartLine, isCreate);
+                int lineCount = sb.ToString().Split('\n').Length;
+                if (lineCount < 28)//
+                {
+                    sb.Insert(cursorPos, "\n");
+                    cursorPos++;
+                    Render(sb, cursorPos, editStartLine, isCreate);
+                }
+                // If the user tries to add a new line but we're already at the 28 line limit, we show an error message instead of adding the line
+                else
+                {
+                    int currentX = Console.CursorLeft;
+                    int currentY = Console.CursorTop;
+                    
+                    Console.SetCursorPosition(0, Console.WindowHeight - 1);
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.Write("Error: Maximum of 28 lines reached!");
+
+                    Thread.Sleep(2000);
+        
+                    Console.SetCursorPosition(0, Console.WindowHeight - 1);
+                    Console.Write(new string(' ', Console.WindowWidth));
+
+                    Console.SetCursorPosition(currentX, currentY);
+                    Console.ResetColor();
+                }
             }
             else if (!char.IsControl(keyInfo.KeyChar))
             {
-                sb.Insert(cursorPos, keyInfo.KeyChar);
-                cursorPos++;
-                Render(sb, cursorPos, editStartLine, isCreate);
+                int estimatedRows = (sb.Length / Console.WindowWidth) + sb.ToString().Split('\n').Length;
+                // We check if adding another character would exceed our 28 line limit before actually inserting it
+                if (estimatedRows < 28)    
+                {
+                    sb.Insert(cursorPos, keyInfo.KeyChar);
+                    cursorPos++;
+                    Render(sb, cursorPos, editStartLine, isCreate);
+                }
             }
             
             UpdateCursor(sb, cursorPos, editStartLine, isCreate);
@@ -387,6 +415,7 @@ public class NoteEditor
         return sb.ToString();
     }
 
+    // This method calculates the new cursor position when moving up or down, trying to maintain the same column as much as possible. It splits the text into lines, finds the current line and column based on the cursor position, and then calculates the target line and new cursor position accordingly.
     private int MoveVertical(string text, int currentPos, int direction)
     {
         string[] lines = text.Split('\n');
@@ -421,6 +450,7 @@ public class NoteEditor
         return newPos;
     }
 
+    // This method is responsible for rendering the current content of the note editor on the console. It clears the area where the text is displayed, then writes the content with proper formatting. If we're in create mode, it adds a "> " prompt at the beginning of each line. After rendering the text, it calls UpdateCursor to ensure the cursor is positioned correctly based on the current cursorPos in the text.
     private void Render(StringBuilder sb, int cursorPos, int startLine, bool isCreate)
     {
         // Move back to where the typing area starts
@@ -437,7 +467,7 @@ public class NoteEditor
 
         string content = sb.ToString();
 
-        // If creating, we ensure every NEW line starts with the prompt
+        // If creating, we ensure every NE line starts with the prompt
         if (isCreate)
         {
             // This splits the text and re-adds the prompt to every visual line
@@ -450,6 +480,7 @@ public class NoteEditor
     
         UpdateCursor(sb, cursorPos, startLine, isCreate);
     }
+    // This method calculates the correct cursor position on the console based on the current cursorPos in the text. It takes into account new lines and the width of the console to ensure that the cursor moves correctly as the user types, deletes, or navigates through the text. If we're in create mode, it also accounts for the "> " prompt at the beginning of each line when calculating positions.
     private void UpdateCursor(StringBuilder sb, int cursorPos, int startLine, bool isCreate)
     {
         int width = Console.WindowWidth;
@@ -494,6 +525,7 @@ class TotePad
     private NoteEditor _editor = new();
     private List<Event> _events = new List<Event>();
 
+    // This is the main method that runs the application. It first ensures that the necessary directories exist and loads all existing notes. Then it enters a loop where it displays the main menu and responds to user input to navigate to the notes menu, calendar menu, or exit the application.
     public void Run()
     {
         _service.EnsureDirectoryExists();
@@ -539,7 +571,7 @@ class TotePad
     void CreateNote()
     {
         MenuRenderer.DrawHeader("CREATE NEW NOTE"); 
-        MenuRenderer.InstructionHeader("Enter Title or press ESC to cancel.");
+        MenuRenderer.InstructionHeader("Make youe Note or press ESC to cancel.");
     
         Console.CursorVisible = true; 
         Console.ForegroundColor = ConsoleColor.Cyan; 
@@ -674,6 +706,7 @@ class TotePad
         MenuRenderer.DrawHeader("SCHEDULE NEW EVENT");
         MenuRenderer.InstructionHeader("Fill in the details. Press ESC at any time to cancel.");
 
+        // Input for event title, with validation to ensure it's not blank
         string title;
         while (true)
         {
@@ -684,6 +717,7 @@ class TotePad
             MenuRenderer.DrawHeader("SCHEDULE NEW EVENT");
             MenuRenderer.InstructionHeader("Fill in the details, Press ESC at any time to cancel");
         }
+        // Input for event date, with validation to ensure it's in the correct format
         DateTime eventDate;
         while (true)
         {
@@ -697,17 +731,28 @@ class TotePad
             MenuRenderer.DrawHeader("SCHEDULE NEW EVENT");
             MenuRenderer.InstructionHeader("Fill in the details, Press ESC at any time to cancel");
         }
-
+        // Input for event time, with basic validation to ensure it's not blank and starts with a number (for simplicity)
         string time;
         while (true)
         {
             if (!TryGetInput(" Time (HH:mm): ", out time)) return;
-            if (!string.IsNullOrWhiteSpace(time)) break;
-            MenuRenderer.ShowErrorMessage("Time cannot be blank!");
+
+            if (string.IsNullOrWhiteSpace(time))
+            {
+                MenuRenderer.ShowErrorMessage("Time cannot be blank!");
+            }
+            else if (!char.IsDigit(time[0]))
+            {
+                MenuRenderer.ShowErrorMessage("Invalid! Time must start with a number (e.g., 9:00 AM).");
+            }
+            else
+            {
+                break;
+            }
             MenuRenderer.DrawHeader("SCHEDULE NEW EVENT");
             MenuRenderer.InstructionHeader("Fill in the details, Press ESC at any time to cancel");
         }
-
+        // Input for event description, with validation to ensure it's not blank
         string description;
         while (true)
         {
@@ -802,7 +847,7 @@ class TotePad
             Thread.Sleep(800);
         }
     }
-    // Helper method to for cancelling (ESC) purpose (as well as title forground color) sepcifically for CreateEvent since it is not in loop,
+    // Helper method to for cancelling (ESC) purpose (as well as title forground color) sepcifically for CreateEvent 
     private bool TryGetInput(string prompt, out string result)
     {
         Console.CursorVisible = true;
