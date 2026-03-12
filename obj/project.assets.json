@@ -8,19 +8,19 @@
     "net9.0": []
   },
   "packageFolders": {
-    "C:\\Users\\Administrator\\.nuget\\packages\\": {}
+    "C:\\Users\\BEARD\\.nuget\\packages\\": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\Administrator\\OneDrive\\TOTEPAD\\TOTEPAD FINALS\\TOTEPAD FINALS 1.0\\TOTEPAD FINALE.csproj",
-      "projectName": "TOTEPAD FINALE",
-      "projectPath": "C:\\Users\\Administrator\\OneDrive\\TOTEPAD\\TOTEPAD FINALS\\TOTEPAD FINALS 1.0\\TOTEPAD FINALE.csproj",
-      "packagesPath": "C:\\Users\\Administrator\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\Administrator\\OneDrive\\TOTEPAD\\TOTEPAD FINALS\\TOTEPAD FINALS 1.0\\obj\\",
+      "projectUniqueName": "C:\\Users\\BEARD\\Documents\\TotePad\\totepad-cli\\TOTEPAD FINALS 1.0.csproj",
+      "projectName": "TOTEPAD FINALS 1.0",
+      "projectPath": "C:\\Users\\BEARD\\Documents\\TotePad\\totepad-cli\\TOTEPAD FINALS 1.0.csproj",
+      "packagesPath": "C:\\Users\\BEARD\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\BEARD\\Documents\\TotePad\\totepad-cli\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "C:\\Users\\Administrator\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        "C:\\Users\\BEARD\\AppData\\Roaming\\NuGet\\NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net9.0"
@@ -65,7 +65,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.303/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.304/PortableRuntimeIdentifierGraph.json"
       }
     }
   }
