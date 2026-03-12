@@ -752,24 +752,20 @@ class TotePad
             MenuRenderer.DrawHeader("SCHEDULE NEW EVENT");
             MenuRenderer.InstructionHeader("Fill in the details, Press ESC at any time to cancel");
         }
-        // Input for event description, with validation to ensure it's not blank
-        string description;
-        while (true)
+        // Input for event description using the NoteEditor, allowing for multi-line input. The user can save by pressing Tab or cancel by pressing Esc.
+        Console.WriteLine("\n Description (TAB to save, ESC to cancel):");
+        NoteEditor editor = new NoteEditor();
+        string? description = editor.EditContent("", true);
+        if (description == null) return;
+        if (MenuRenderer.ShowDecisionMenu("Save this event?", "Cancel", "Save"))
         {
-            if (!TryGetInput("Description: ", out description)) return;
-            if (!string.IsNullOrWhiteSpace(description)) break;
-            MenuRenderer.ShowErrorMessage("Description cannot be blank!");
-            MenuRenderer.DrawHeader("SCHEDULE NEW EVENT");
-            MenuRenderer.InstructionHeader("Fill in the details, Press ESC at any time to cancel");
+            _events.Add(new Event(title, eventDate, time, description));
+            _service.SaveEvents(_events);
+        
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("\n [ Event saved successfully! ]");
+            Thread.Sleep(1000);
         }
-        // Create and Save
-        Event newEvent = new Event(title, eventDate, time, description);
-        _events.Add(newEvent);
-        _service.SaveEvents(_events);
-
-        Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine("\n [ Event Saved! ]");
-        Thread.Sleep(800);
     }
     //This allows users to view details of existing events by selecting from the calendar.
     void ViewEvent()
@@ -799,26 +795,56 @@ class TotePad
             MenuRenderer.ShowErrorMessage("NO EVENTS TO MODIFY!");
             return;
         }
-        MenuRenderer.DrawHeader("SELECT EVENTS TO MODIFY");
+        MenuRenderer.DrawHeader("SELECT EVENT TO MODIFY");
         MenuRenderer.InstructionHeader("Use arrow keys to select an event. Press Enter to edit, or Esc to cancel");
         int index = MenuRenderer.ShowArrowMenu(_events.Select(e => $"{e.Title} ({e.Date:MMM dd, yyyy})").ToArray());
         if (index == -1) return;
-        Event selectedEvent = _events[index];
-        // changes to title
-        if (!TryGetInput($" Title ({selectedEvent.Title}): ", out string title)) return;
-        if (string.IsNullOrWhiteSpace(title)) title = selectedEvent.Title;
-        // changes to date, default to original date if parsing fails
-        if (!TryGetInput($" Date ({selectedEvent.Date:yyyy-MM-dd}): ", out string dateInput)) return;
-        DateTime eventDate = DateTime.TryParse(dateInput, out var d) ? d : selectedEvent.Date;
-        // changes to time, default to original time if input is empty
-        if (!TryGetInput($" Time ({selectedEvent.Time}): ", out string time)) return;
-        if (string.IsNullOrWhiteSpace(time)) time = selectedEvent.Time;
 
+        Event selectedEvent = _events[index];
+        string title;
+        while (true)
+        {
+            if (!TryGetInput($" Title ({selectedEvent.Title}): ", out title)) return;
+            // If they leave it blank, keep the old title
+            if (string.IsNullOrWhiteSpace(title)) title = selectedEvent.Title;
+            break;
+        }
+        DateTime eventDate;
+        while (true)
+        {
+            if (!TryGetInput($" Date ({selectedEvent.Date:yyyy-MM-dd}): ", out string dateInput)) return;
+
+            if (string.IsNullOrWhiteSpace(dateInput))
+            {
+                eventDate = selectedEvent.Date;
+                break;
+            }
+            if (DateTime.TryParse(dateInput, out eventDate)) break;
+            MenuRenderer.ShowErrorMessage("Invalid Date! Use YYYY-MM-DD.");
+            MenuRenderer.DrawHeader("SELECT EVENT TO MODIFY");
+        }
+        string time;
+        while (true)
+        {
+            if (!TryGetInput($" Time ({selectedEvent.Time}): ", out time)) return;
+        
+            // If blank, keep old time
+            if (string.IsNullOrWhiteSpace(time))
+            {
+                time = selectedEvent.Time;
+                break;
+            }
+            if (char.IsDigit(time[0])) break;
+
+            MenuRenderer.ShowErrorMessage("Invalid! Time must start with a number (e.g., 9:00).");
+            MenuRenderer.DrawHeader("SELECT EVENT TO MODIFY");
+        }
         Console.WriteLine("\n Description (TAB to save, ESC to cancel):");
         NoteEditor editor = new NoteEditor();
         string? description = editor.EditContent(selectedEvent.Description ?? "", false);
 
         if (description == null) return;
+
         if (MenuRenderer.ShowDecisionMenu("Save changes?", "Don't Save", "Save"))
         {
             _events[index] = selectedEvent with { Title = title, Date = eventDate, Time = time, Description = description };
