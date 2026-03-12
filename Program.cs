@@ -674,22 +674,49 @@ class TotePad
         MenuRenderer.DrawHeader("SCHEDULE NEW EVENT");
         MenuRenderer.InstructionHeader("Fill in the details. Press ESC at any time to cancel.");
 
-        // Get Event Details
-        if (!TryGetInput(" Event Title: ", out string title)) return;
-        if (string.IsNullOrWhiteSpace(title)) title = "New Event";
-        // Default date to today if parsing fails, but allow user to input in YYYY-MM-DD format
-        if (!TryGetInput(" Date (YYYY-MM-DD): ", out string dateInput)) return;
-        DateTime eventDate = DateTime.TryParse(dateInput, out var d) ? d : DateTime.Today;
-        // Default time to 09:00 if parsing fails, but allow user to input in HH:mm format
-        if (!TryGetInput(" Time (HH:mm): ", out string time)) return;
-        if (string.IsNullOrWhiteSpace(time)) time = "09:00";
+        string title;
+        while (true)
+        {
+            if (!TryGetInput(" Event Title: ", out title)) return;
+            if (!string.IsNullOrWhiteSpace(title)) break;
+            MenuRenderer.ShowErrorMessage("Title cannot be blank!");
+            // Redraw header because ShowErrorMessage destro up alignment
+            MenuRenderer.DrawHeader("SCHEDULE NEW EVENT");
+            MenuRenderer.InstructionHeader("Fill in the details, Press ESC at any time to cancel");
+        }
+        DateTime eventDate;
+        while (true)
+        {
+            if (!TryGetInput(" Date (YYYY-MM-DD): ", out string dateInput)) return;
 
-        // Use your existing editor for the long description
-        Console.WriteLine("\n Description (TAB to save, ESC to cancel):");
-        NoteEditor editor = new NoteEditor();
-        string? description = editor.EditContent("", true);
-        if (description == null) return;
+            if (DateTime.TryParse(dateInput, out eventDate))
+            {
+                break;
+            }
+            MenuRenderer.ShowErrorMessage("Invalid Date! Please use YYYY-MM-DD (e.g., 2026-12-25)");
+            MenuRenderer.DrawHeader("SCHEDULE NEW EVENT");
+            MenuRenderer.InstructionHeader("Fill in the details, Press ESC at any time to cancel");
+        }
 
+        string time;
+        while (true)
+        {
+            if (!TryGetInput(" Time (HH:mm): ", out time)) return;
+            if (!string.IsNullOrWhiteSpace(time)) break;
+            MenuRenderer.ShowErrorMessage("Time cannot be blank!");
+            MenuRenderer.DrawHeader("SCHEDULE NEW EVENT");
+            MenuRenderer.InstructionHeader("Fill in the details, Press ESC at any time to cancel");
+        }
+
+        string description;
+        while (true)
+        {
+            if (!TryGetInput("Description: ", out description)) return;
+            if (!string.IsNullOrWhiteSpace(description)) break;
+            MenuRenderer.ShowErrorMessage("Description cannot be blank!");
+            MenuRenderer.DrawHeader("SCHEDULE NEW EVENT");
+            MenuRenderer.InstructionHeader("Fill in the details, Press ESC at any time to cancel");
+        }
         // Create and Save
         Event newEvent = new Event(title, eventDate, time, description);
         _events.Add(newEvent);
